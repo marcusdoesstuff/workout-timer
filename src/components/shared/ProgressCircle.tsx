@@ -4,10 +4,10 @@ interface ProgressCircleProps {
   duration: number; // Duration in seconds
   isPaused: boolean;
   isActive: boolean;
-  onComplete?: () => void;
+  onComplete?: () => void; // Keeping interface but not using it
 }
 
-export default function ProgressCircle({ duration, isPaused, isActive, onComplete }: ProgressCircleProps) {
+export default function ProgressCircle({ duration, isPaused, isActive }: ProgressCircleProps) {
   const [animationKey, setAnimationKey] = useState(0);
 
   // Reset animation when duration changes or becomes active
@@ -17,31 +17,21 @@ export default function ProgressCircle({ duration, isPaused, isActive, onComplet
     }
   }, [duration, isActive]);
 
-  // Handle completion - note this is just a backup, the real timer logic handles progression
-  useEffect(() => {
-    if (isActive && !isPaused && duration > 0) {
-      const timeout = setTimeout(() => {
-        if (onComplete) {
-          onComplete();
-        }
-      }, duration * 1000);
-      return () => clearTimeout(timeout);
-    }
-  }, [animationKey, isPaused, duration, onComplete]);
+  // Removed completion timeout - this component is purely visual
+  // The main timer logic in useWorkoutTimer handles all timing
 
   if (!isActive || duration === 0) {
     return null;
   }
 
-  const circumference = 2 * Math.PI * 16; // radius = 16 for a 40x40 circle (w-10 h-10)
-
+  // Use CSS custom properties for responsive sizing
   return (
     <>
       <style>
         {`
           @keyframes progressRing {
             from {
-              stroke-dashoffset: ${circumference};
+              stroke-dashoffset: var(--circumference);
             }
             to {
               stroke-dashoffset: 0;
@@ -56,21 +46,21 @@ export default function ProgressCircle({ duration, isPaused, isActive, onComplet
       </style>
       <div className="absolute inset-0 flex items-center justify-center">
         <svg 
-          width="40" 
-          height="40" 
-          className="transform -rotate-90"
+          className="w-full h-full transform -rotate-90"
           style={{ zIndex: 10 }}
+          viewBox="0 0 100 100"
         >
           <circle
-            cx="20"
-            cy="20"
-            r="16"
+            cx="50"
+            cy="50"
+            r="45"
             stroke="currentColor"
-            strokeWidth="3"
+            strokeWidth="10"
             fill="transparent"
             className={`text-blue-600 progress-ring-${animationKey}`}
-            strokeDasharray={circumference}
-            strokeDashoffset={circumference}
+            strokeDasharray="282.74"
+            strokeDashoffset="282.74"
+            style={{ '--circumference': '282.74' } as React.CSSProperties}
           />
         </svg>
       </div>

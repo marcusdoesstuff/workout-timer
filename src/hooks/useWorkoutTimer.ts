@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { WorkoutBlock, TempoPhase } from '../types/workout';
 
 interface WorkoutActivity {
@@ -6,6 +6,15 @@ interface WorkoutActivity {
   type: 'prep' | 'exercise' | 'rest';
   name: string;
   setNumber?: number;
+}
+
+interface WorkoutSegment {
+  activityIndex: number;
+  rep: number;
+  phase: TempoPhase | 'prep' | 'rest';
+  duration: number;
+  startTime: number; // When this segment starts (in ms from workout start)
+  endTime: number;   // When this segment ends (in ms from workout start)
 }
 
 interface WorkoutTimerState {
@@ -16,6 +25,11 @@ interface WorkoutTimerState {
   isRunning: boolean;
   isPaused: boolean;
   isLocked: boolean;
+  // Global timer state
+  startTime: number;
+  pausedTime: number;
+  globalElapsed: number;
+  currentSegmentIndex: number;
 }
 
 export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
@@ -26,9 +40,15 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
     timeRemaining: 0,
     isRunning: false,
     isPaused: false,
-    isLocked: false
+    isLocked: false,
+    startTime: 0,
+    pausedTime: 0,
+    globalElapsed: 0,
+    currentSegmentIndex: 0
   });
 
+  const segmentsRef = useRef<WorkoutSegment[]>([]);
+  
   // Generate the workout activities (set-level only)
   const generateWorkoutActivities = useCallback((): WorkoutActivity[] => {
     const activities: WorkoutActivity[] = [];
@@ -65,194 +85,159 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
     return activities;
   }, [workoutBlock]);
 
-  const activities = generateWorkoutActivities();
-  const currentActivity = activities[state.currentActivityIndex];
+  // Generate all workout segments with precise timing
+  const generateWorkoutSegments = useCallback((): WorkoutSegment[] => {
+    const activities = generateWorkoutActivities();
+    const segments: WorkoutSegment[] = [];
+    let currentTime = 0;
 
-  // Helper function to advance to next non-zero tempo phase
-  const getNextTempoPhase = useCallback((currentPhase: TempoPhase): { phase: TempoPhase, duration: number } => {
-    const phases: TempoPhase[] = ['down', 'hold', 'up', 'pause'];
-    let currentIndex = phases.indexOf(currentPhase);
-    
-    // Keep advancing until we find a non-zero phase or complete the cycle
-    for (let i = 0; i < 4; i++) {
-      currentIndex = (currentIndex + 1) % 4;
-      const nextPhase = phases[currentIndex];
-      const duration = workoutBlock.tempo[nextPhase];
-      
-      if (duration > 0) {
-        return { phase: nextPhase, duration };
-      }
-    }
-    
-    // If all phases are 0 (shouldn't happen), return down with 0 duration
-    return { phase: 'down', duration: 0 };
-  }, [workoutBlock.tempo]);
+    for (let activityIndex = 0; activityIndex < activities.length; activityIndex++) {
+      const activity = activities[activityIndex];
 
-  // Get the duration for the current timer state
-  const getCurrentDuration = useCallback(() => {
-    if (!currentActivity) return 0;
-    
-    if (currentActivity.type === 'prep') {
-      return workoutBlock.prepSeconds;
-    } else if (currentActivity.type === 'rest') {
-      return workoutBlock.restSeconds;
-    } else if (currentActivity.type === 'exercise') {
-      // Return duration for current tempo phase
-      switch (state.currentTempoPhase) {
-        case 'down': return workoutBlock.tempo.down;
-        case 'hold': return workoutBlock.tempo.hold;
-        case 'up': return workoutBlock.tempo.up;
-        case 'pause': return workoutBlock.tempo.pause;
-        default: return 0;
-      }
-    }
-    return 0;
-  }, [currentActivity, state.currentTempoPhase, workoutBlock]);
-
-  // Timer effect
-  useEffect(() => {
-    if (!state.isRunning || state.isPaused || !currentActivity) return;
-
-    const interval = setInterval(() => {
-      setState(prevState => {
-        if (prevState.timeRemaining <= 1) {
-          // Time's up - move to next phase
-          if (currentActivity.type === 'prep' || currentActivity.type === 'rest') {
-            // Move to next activity
-            const nextIndex = prevState.currentActivityIndex + 1;
-            if (nextIndex < activities.length) {
-              const nextActivity = activities[nextIndex];
-              const nextDuration = nextActivity.type === 'prep' ? workoutBlock.prepSeconds :
-                                 nextActivity.type === 'rest' ? workoutBlock.restSeconds :
-                                 workoutBlock.tempo.down; // Start with down phase for exercise
-              
-              return {
-                ...prevState,
-                currentActivityIndex: nextIndex,
-                currentRep: nextActivity.type === 'exercise' ? 1 : prevState.currentRep,
-                currentTempoPhase: nextActivity.type === 'exercise' ? 'down' : prevState.currentTempoPhase,
-                timeRemaining: nextDuration
-              };
-            } else {
-              // Workout complete
-              return { ...prevState, isRunning: false, timeRemaining: 0 };
-            }
-          } else if (currentActivity.type === 'exercise') {
-            // Handle tempo phase progression
-            const { currentTempoPhase, currentRep } = prevState;
-            
-            // Move to next tempo phase
-            if (currentTempoPhase === 'down') {
-              const { phase, duration } = getNextTempoPhase('down');
-              return {
-                ...prevState,
-                currentTempoPhase: phase,
-                timeRemaining: duration
-              };
-            } else if (currentTempoPhase === 'hold') {
-              const { phase, duration } = getNextTempoPhase('hold');
-              return {
-                ...prevState,
-                currentTempoPhase: phase,
-                timeRemaining: duration
-              };
-            } else if (currentTempoPhase === 'up') {
-              const { phase, duration } = getNextTempoPhase('up');
-              return {
-                ...prevState,
-                currentTempoPhase: phase,
-                timeRemaining: duration
-              };
-            } else if (currentTempoPhase === 'pause') {
-              // End of rep - check if set is complete
-              if (currentRep >= workoutBlock.reps) {
-                // Set complete - move to next activity
-                const nextIndex = prevState.currentActivityIndex + 1;
-                if (nextIndex < activities.length) {
-                  const nextActivity = activities[nextIndex];
-                  const nextDuration = nextActivity.type === 'rest' ? workoutBlock.restSeconds :
-                                     nextActivity.type === 'exercise' ? workoutBlock.tempo.down :
-                                     workoutBlock.prepSeconds;
-                  
-                  return {
-                    ...prevState,
-                    currentActivityIndex: nextIndex,
-                    currentRep: nextActivity.type === 'exercise' ? 1 : prevState.currentRep,
-                    currentTempoPhase: nextActivity.type === 'exercise' ? 'down' : prevState.currentTempoPhase,
-                    timeRemaining: nextDuration
-                  };
-                } else {
-                  // Workout complete
-                  return { ...prevState, isRunning: false, timeRemaining: 0 };
-                }
-              } else {
-                // Start next rep
-                let nextDuration = workoutBlock.tempo.down;
-                let nextPhase: TempoPhase = 'down';
-                
-                // If down phase has 0 duration, skip to next non-zero phase
-                if (nextDuration === 0) {
-                  const { phase, duration } = getNextTempoPhase('pause'); // Get next after pause (wraps to down)
-                  nextPhase = phase;
-                  nextDuration = duration;
-                }
-                
-                return {
-                  ...prevState,
-                  currentRep: currentRep + 1,
-                  currentTempoPhase: nextPhase,
-                  timeRemaining: nextDuration
-                };
-              }
-            }
+      if (activity.type === 'prep') {
+        if (workoutBlock.prepSeconds > 0) {
+          segments.push({
+            activityIndex,
+            rep: 1,
+            phase: 'prep',
+            duration: workoutBlock.prepSeconds * 1000,
+            startTime: currentTime,
+            endTime: currentTime + (workoutBlock.prepSeconds * 1000)
+          });
+          currentTime += workoutBlock.prepSeconds * 1000;
+        }
+      } else if (activity.type === 'rest') {
+        if (workoutBlock.restSeconds > 0) {
+          segments.push({
+            activityIndex,
+            rep: 1,
+            phase: 'rest',
+            duration: workoutBlock.restSeconds * 1000,
+            startTime: currentTime,
+            endTime: currentTime + (workoutBlock.restSeconds * 1000)
+          });
+          currentTime += workoutBlock.restSeconds * 1000;
+        }
+      } else if (activity.type === 'exercise') {
+        // Generate segments for each rep
+        for (let rep = 1; rep <= workoutBlock.reps; rep++) {
+          const phases: TempoPhase[] = ['down', 'hold', 'up', 'pause'];
+          
+          for (const phase of phases) {
+            const duration = workoutBlock.tempo[phase] * 1000;
+            // Include all segments, even zero-duration ones for debugging
+            segments.push({
+              activityIndex,
+              rep,
+              phase,
+              duration,
+              startTime: currentTime,
+              endTime: currentTime + duration
+            });
+            currentTime += duration;
           }
         }
-        
-        return { ...prevState, timeRemaining: prevState.timeRemaining - 1 };
-      });
-    }, 1000);
+      }
+    }
+
+    return segments;
+  }, [workoutBlock, generateWorkoutActivities]);
+
+  // Calculate total workout duration
+  const getTotalWorkoutDuration = useCallback((): number => {
+    const segments = generateWorkoutSegments();
+    return segments.length > 0 ? segments[segments.length - 1].endTime : 0;
+  }, [generateWorkoutSegments]);
+
+  // Initialize segments
+  useEffect(() => {
+    segmentsRef.current = generateWorkoutSegments();
+  }, [generateWorkoutSegments]);
+
+  const activities = generateWorkoutActivities();
+  const currentActivity = activities[state.currentActivityIndex];
+  const totalWorkoutDuration = getTotalWorkoutDuration();
+
+  // Global timer - runs at 50ms intervals for smooth updates
+  useEffect(() => {
+    if (!state.isRunning || state.isPaused) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - state.startTime - state.pausedTime;
+      
+      // Find current segment based on elapsed time
+      const segments = segmentsRef.current;
+      let currentSegmentIndex = state.currentSegmentIndex;
+      
+      // Handle potential timing skips by checking all segments
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i];
+        if (elapsed >= segment.startTime && elapsed < segment.endTime) {
+          currentSegmentIndex = i;
+          break;
+        }
+        if (elapsed >= segment.endTime && i === segments.length - 1) {
+          // Workout complete
+          setState(prev => ({ 
+            ...prev, 
+            isRunning: false, 
+            globalElapsed: elapsed,
+            timeRemaining: 0 
+          }));
+          return;
+        }
+      }
+
+      const currentSegment = segments[currentSegmentIndex];
+      if (!currentSegment) return;
+
+      // Calculate remaining time for current segment
+      const segmentElapsed = elapsed - currentSegment.startTime;
+      const timeRemaining = Math.max(0, Math.ceil((currentSegment.duration - segmentElapsed) / 1000));
+
+      // Check if we need to advance to next segment (including zero-duration segments)
+      if (elapsed >= currentSegment.endTime && currentSegmentIndex < segments.length - 1) {
+        currentSegmentIndex++;
+      }
+
+      const nextSegment = segments[currentSegmentIndex];
+      if (!nextSegment) return;
+
+      setState(prev => ({
+        ...prev,
+        currentActivityIndex: nextSegment.activityIndex,
+        currentRep: nextSegment.rep,
+        currentTempoPhase: nextSegment.phase === 'prep' || nextSegment.phase === 'rest' ? prev.currentTempoPhase : nextSegment.phase as TempoPhase,
+        timeRemaining,
+        globalElapsed: elapsed,
+        currentSegmentIndex
+      }));
+    }, 50); // 50ms for smooth updates
 
     return () => clearInterval(interval);
-  }, [state.isRunning, state.isPaused, currentActivity, activities, workoutBlock, getNextTempoPhase]);
-
-  // Initialize timer when activity changes
-  useEffect(() => {
-    if (currentActivity && state.timeRemaining === 0) {
-      let duration = getCurrentDuration();
-      let tempoPhase = state.currentTempoPhase;
-      
-      // If starting an exercise and the current phase has 0 duration, skip to next non-zero phase
-      if (currentActivity.type === 'exercise' && duration === 0) {
-        const { phase, duration: nextDuration } = getNextTempoPhase(state.currentTempoPhase);
-        tempoPhase = phase;
-        duration = nextDuration;
-      }
-      
-      setState(prev => ({ 
-        ...prev, 
-        timeRemaining: duration,
-        currentTempoPhase: tempoPhase
-      }));
-    }
-  }, [state.currentActivityIndex, currentActivity, getCurrentDuration, getNextTempoPhase]);
+  }, [state.isRunning, state.isPaused, state.startTime, state.pausedTime]);
 
   const startWorkout = () => {
-    let duration = getCurrentDuration();
-    let tempoPhase = state.currentTempoPhase;
+    const now = Date.now();
+    const segments = segmentsRef.current;
     
-    // If starting an exercise and the current phase has 0 duration, skip to next non-zero phase
-    if (currentActivity?.type === 'exercise' && duration === 0) {
-      const { phase, duration: nextDuration } = getNextTempoPhase(state.currentTempoPhase);
-      tempoPhase = phase;
-      duration = nextDuration;
-    }
+    if (segments.length === 0) return;
+    
+    const firstSegment = segments[0];
     
     setState(prev => ({
       ...prev,
       isRunning: true,
       isPaused: false,
-      timeRemaining: duration,
-      currentTempoPhase: tempoPhase
+      startTime: now,
+      pausedTime: 0,
+      globalElapsed: 0,
+      currentActivityIndex: firstSegment.activityIndex,
+      currentRep: firstSegment.rep,
+      currentTempoPhase: firstSegment.phase === 'prep' || firstSegment.phase === 'rest' ? 'down' : firstSegment.phase as TempoPhase,
+      timeRemaining: Math.ceil(firstSegment.duration / 1000),
+      currentSegmentIndex: 0
     }));
   };
 
@@ -261,7 +246,15 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
   };
 
   const resumeWorkout = () => {
-    setState(prev => ({ ...prev, isPaused: false }));
+    const now = Date.now();
+    setState(prev => {
+      const pauseDuration = now - (prev.startTime + prev.globalElapsed);
+      return {
+        ...prev,
+        isPaused: false,
+        pausedTime: prev.pausedTime + pauseDuration
+      };
+    });
   };
 
   const toggleLock = () => {
@@ -271,26 +264,21 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
   const jumpToActivity = (activityIndex: number) => {
     if (state.isLocked) return;
     
-    if (activityIndex >= 0 && activityIndex < activities.length) {
-      const targetActivity = activities[activityIndex];
-      let duration = targetActivity.type === 'prep' ? workoutBlock.prepSeconds :
-                    targetActivity.type === 'rest' ? workoutBlock.restSeconds :
-                    workoutBlock.tempo.down; // Start with down phase for exercise
-      let tempoPhase = targetActivity.type === 'exercise' ? 'down' : state.currentTempoPhase;
-      
-      // If jumping to an exercise and down phase has 0 duration, skip to next non-zero phase
-      if (targetActivity.type === 'exercise' && duration === 0) {
-        const { phase, duration: nextDuration } = getNextTempoPhase('down');
-        tempoPhase = phase;
-        duration = nextDuration;
-      }
-      
+    const segments = segmentsRef.current;
+    const targetSegment = segments.find(s => s.activityIndex === activityIndex);
+    
+    if (targetSegment) {
+      const now = Date.now();
       setState(prev => ({
         ...prev,
-        currentActivityIndex: activityIndex,
-        currentRep: targetActivity.type === 'exercise' ? 1 : prev.currentRep,
-        currentTempoPhase: tempoPhase,
-        timeRemaining: duration
+        startTime: now - targetSegment.startTime,
+        pausedTime: 0,
+        globalElapsed: targetSegment.startTime,
+        currentActivityIndex: targetSegment.activityIndex,
+        currentRep: targetSegment.rep,
+        currentTempoPhase: targetSegment.phase === 'prep' || targetSegment.phase === 'rest' ? 'down' : targetSegment.phase as TempoPhase,
+        timeRemaining: Math.ceil(targetSegment.duration / 1000),
+        currentSegmentIndex: segments.indexOf(targetSegment)
       }));
     }
   };
@@ -299,12 +287,9 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
     return currentActivity?.setNumber || 1;
   };
 
-  const isCompleted = state.currentActivityIndex >= activities.length - 1 && 
-                     state.timeRemaining === 0 && 
-                     !state.isRunning;
+  const isCompleted = !state.isRunning && state.globalElapsed > 0;
 
   return {
-    // State
     activities,
     currentActivity,
     currentActivityIndex: state.currentActivityIndex,
@@ -315,15 +300,16 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
     isPaused: state.isPaused,
     isLocked: state.isLocked,
     isCompleted,
-    
-    // Computed values
     getCurrentSet,
-    
-    // Actions
     startWorkout,
     pauseWorkout,
     resumeWorkout,
     toggleLock,
-    jumpToActivity
+    jumpToActivity,
+    // Debug info
+    globalElapsed: state.globalElapsed,
+    currentSegmentIndex: state.currentSegmentIndex,
+    totalSegments: segmentsRef.current.length,
+    totalWorkoutDuration
   };
 } 
