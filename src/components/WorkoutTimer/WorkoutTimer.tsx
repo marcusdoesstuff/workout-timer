@@ -33,10 +33,6 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
   } = useWorkoutTimer(workoutBlock);
 
   const activityListRef = useRef<HTMLDivElement>(null);
-  
-  // State for tracking when phases have recently completed (for transition timing)
-  const [fadingPhases, setFadingPhases] = useState<Set<string>>(new Set());
-  const fadeTimeoutsRef = useRef<Map<string, number>>(new Map());
   const [showDebug, setShowDebug] = useState<boolean>(true);
 
   const formatTime = (seconds: number) => {
@@ -90,38 +86,6 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
       startWorkout();
     }
   }, []);
-
-  // Simplified fade logic - track when segments change
-  useEffect(() => {
-    if (currentActivity?.type === 'exercise') {
-      const currentPhaseIndex = getCurrentPhaseIndex();
-      const currentKey = `${currentActivityIndex}-${currentRep}-${currentPhaseIndex}`;
-      
-      // When segment changes, add previous phases to fading set
-      // This is much simpler and relies on the global timer for timing
-      return () => {
-        // Add current phase to fading when this effect cleans up (segment changes)
-        if (currentPhaseIndex >= 0) {
-          const fadeKey = `${currentActivityIndex}-${currentRep}-${currentPhaseIndex}`;
-          setFadingPhases(prev => new Set([...prev, fadeKey]));
-          
-          // Remove from fading after 500ms
-          setTimeout(() => {
-            setFadingPhases(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(fadeKey);
-              return newSet;
-            });
-          }, 500);
-        }
-      };
-    }
-  }, [currentActivityIndex, currentRep, currentTempoPhase]);
-
-  // Clear fading phases when activity changes
-  useEffect(() => {
-    setFadingPhases(new Set());
-  }, [currentActivityIndex]);
 
   const renderActivitySummary = (activity: any, index: number) => {
     const isActive = index === currentActivityIndex;
@@ -248,7 +212,7 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
             <div>
               <span className="text-yellow-700 font-medium">Global Elapsed:</span>
               <div className="text-yellow-900 font-mono">
-                {formatDuration(globalElapsed)}
+                {formatDuration(globalElapsed)} ({globalElapsed}ms)
               </div>
             </div>
             <div>
@@ -316,29 +280,22 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
                   <div className="flex gap-2 sm:gap-3 md:gap-4 justify-center">
                     {getTempoDisplay()!.map((tempo, index) => {
                       const isCurrentPhase = index === getCurrentPhaseIndex();
-                      const completedKey = `${currentActivityIndex}-${currentRep}-${index}`;
-                      const isRecentlyCompleted = fadingPhases.has(completedKey);
-                      
-                      // Show blue for current phase OR recently completed (fading) phase
-                      const shouldShowBlue = isCurrentPhase || isRecentlyCompleted;
                       
                       return (
                         <div key={index} className="relative">
-                          {/* Tempo circle - responsive size with conditional fade transition */}
+                          {/* Tempo circle - simple current phase highlighting */}
                           <div
                             className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-lg sm:text-xl md:text-2xl font-semibold relative ${
                               isCurrentPhase
-                                ? 'bg-blue-200 text-blue-600' // Active: immediate blue, no transition
-                                : isRecentlyCompleted
-                                ? 'bg-gray-200 text-gray-600 transition-all duration-500' // Fading: transition to gray
-                                : 'bg-gray-200 text-gray-600' // Inactive: gray, no transition
+                                ? 'bg-blue-200 text-blue-600'
+                                : 'bg-gray-200 text-gray-600'
                             }`}
                             style={{ zIndex: 1 }}
                           >
                             {tempo}
                           </div>
                           
-                          {/* Progress Circle Overlay - purely visual, no completion callbacks */}
+                          {/* Progress Circle Overlay - only for current phase */}
                           {isCurrentPhase && (
                             <ProgressCircle
                               key={`${currentActivityIndex}-${currentTempoPhase}-${currentRep}`}

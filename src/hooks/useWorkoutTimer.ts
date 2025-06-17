@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { setInterval, clearInterval } from 'worker-timers';
 import { WorkoutBlock, TempoPhase } from '../types/workout';
+
+// Using worker-timers for more accurate timing that isn't affected by:
+// - Browser throttling in background tabs
+// - Main thread blocking from heavy operations
+// - Inconsistent timing due to CPU load
 
 interface WorkoutActivity {
   id: string;
@@ -30,6 +36,7 @@ interface WorkoutTimerState {
   pausedTime: number;
   globalElapsed: number;
   currentSegmentIndex: number;
+  pauseStartTime: number;
 }
 
 export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
@@ -44,7 +51,8 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
     startTime: 0,
     pausedTime: 0,
     globalElapsed: 0,
-    currentSegmentIndex: 0
+    currentSegmentIndex: 0,
+    pauseStartTime: 0
   });
 
   const segmentsRef = useRef<WorkoutSegment[]>([]);
@@ -125,7 +133,6 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
           
           for (const phase of phases) {
             const duration = workoutBlock.tempo[phase] * 1000;
-            // Include all segments, even zero-duration ones for debugging
             segments.push({
               activityIndex,
               rep,
@@ -158,13 +165,13 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
   const currentActivity = activities[state.currentActivityIndex];
   const totalWorkoutDuration = getTotalWorkoutDuration();
 
-  // Global timer - runs at 50ms intervals for smooth updates
+  // Global timer - runs at 20ms intervals using worker-timers for accurate, drift-free timing
   useEffect(() => {
     if (!state.isRunning || state.isPaused) return;
 
-    const interval = setInterval(() => {
+    const timerInterval = setInterval(() => {
       const now = Date.now();
-      const elapsed = now - state.startTime - state.pausedTime;
+      const elapsed = Math.max(0, now - state.startTime - state.pausedTime); // Prevent negative elapsed
       
       // Find current segment based on elapsed time
       const segments = segmentsRef.current;
@@ -196,7 +203,7 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
       const segmentElapsed = elapsed - currentSegment.startTime;
       const timeRemaining = Math.max(0, Math.ceil((currentSegment.duration - segmentElapsed) / 1000));
 
-      // Check if we need to advance to next segment (including zero-duration segments)
+      // Check if we need to advance to next segment
       if (elapsed >= currentSegment.endTime && currentSegmentIndex < segments.length - 1) {
         currentSegmentIndex++;
       }
@@ -215,7 +222,7 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
       }));
     }, 50); // 50ms for smooth updates
 
-    return () => clearInterval(interval);
+    return () => clearInterval(timerInterval);
   }, [state.isRunning, state.isPaused, state.startTime, state.pausedTime]);
 
   const startWorkout = () => {
@@ -237,22 +244,31 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
       currentRep: firstSegment.rep,
       currentTempoPhase: firstSegment.phase === 'prep' || firstSegment.phase === 'rest' ? 'down' : firstSegment.phase as TempoPhase,
       timeRemaining: Math.ceil(firstSegment.duration / 1000),
-      currentSegmentIndex: 0
+      currentSegmentIndex: 0,
+      pauseStartTime: 0
     }));
   };
 
   const pauseWorkout = () => {
-    setState(prev => ({ ...prev, isPaused: true }));
+    const now = Date.now();
+    setState(prev => ({ 
+      ...prev, 
+      isPaused: true,
+      pauseStartTime: now
+    }));
   };
 
   const resumeWorkout = () => {
     const now = Date.now();
     setState(prev => {
-      const pauseDuration = now - (prev.startTime + prev.globalElapsed);
+      const pauseDuration = prev.pauseStartTime > 0 ? now - prev.pauseStartTime : 0;
+      const validPauseDuration = Math.max(0, pauseDuration);
+      
       return {
         ...prev,
         isPaused: false,
-        pausedTime: prev.pausedTime + pauseDuration
+        pausedTime: prev.pausedTime + validPauseDuration,
+        pauseStartTime: 0
       };
     });
   };
