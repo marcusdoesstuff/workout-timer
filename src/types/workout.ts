@@ -23,4 +23,36 @@ export interface WorkoutState {
   isPaused: boolean;
 }
 
-export type TempoPhase = 'down' | 'hold' | 'up' | 'pause'; 
+export type TempoPhase = 'down' | 'hold' | 'up' | 'pause';
+
+// New types for enhanced functionality
+export interface SavedWorkoutBlock extends WorkoutBlock {
+  createdAt: Date;
+  lastModified: Date;
+}
+
+export interface FullWorkout {
+  id: string;
+  name: string;
+  workoutBlocks: WorkoutBlock[];  // Ordered sequence
+  createdAt: Date;
+  lastModified: Date;
+}
+
+export interface FullWorkoutState {
+  currentBlockIndex: number;
+  blockState: WorkoutState;
+  totalBlocks: number;
+  expandedBlockIndex: number;  // Which block is expanded in timeline
+  isCompleted: boolean;
+}
+
+// Navigation context for returning to correct screen
+export type NavigationContext = 'build-workout' | 'block-library';
+
+// Local storage structure
+export interface AppStorage {
+  savedBlocks: SavedWorkoutBlock[];
+  savedWorkouts: FullWorkout[];
+  version: string;
+} 

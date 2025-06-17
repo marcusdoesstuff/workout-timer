@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { WorkoutBlock } from '../../types/workout';
+import { FullWorkout } from '../../types/workout';
 import { useWorkoutTimer } from '../../hooks/useWorkoutTimer';
 import ProgressCircle from '../shared/ProgressCircle';
 
 interface WorkoutTimerProps {
-  workoutBlock: WorkoutBlock;
+  fullWorkout: FullWorkout;
   onBack: () => void;
 }
 
-export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps) {
+export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps) {
   const {
     activities,
     currentActivity,
     currentActivityIndex,
+    currentBlockIndex,
     currentRep,
     currentTempoPhase,
     timeRemaining,
@@ -21,6 +22,7 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
     isLocked,
     isCompleted,
     getCurrentSet,
+    getCurrentBlock,
     startWorkout,
     pauseWorkout,
     resumeWorkout,
@@ -30,10 +32,11 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
     currentSegmentIndex,
     totalSegments,
     totalWorkoutDuration
-  } = useWorkoutTimer(workoutBlock);
+  } = useWorkoutTimer(fullWorkout);
 
-  const activityListRef = useRef<HTMLDivElement>(null);
-  const [showDebug, setShowDebug] = useState<boolean>(true);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const [showDebug, setShowDebug] = useState<boolean>(false);
+  const [expandedBlocks, setExpandedBlocks] = useState<Set<number>>(new Set([0])); // Start with first block expanded
 
   const formatTime = (seconds: number) => {
     return seconds.toString();
@@ -52,11 +55,12 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
 
   const getTempoDisplay = () => {
     if (currentActivity?.type === 'exercise') {
+      const currentBlock = getCurrentBlock();
       return [
-        workoutBlock.tempo.down,
-        workoutBlock.tempo.hold,
-        workoutBlock.tempo.up,
-        workoutBlock.tempo.pause
+        currentBlock.tempo.down,
+        currentBlock.tempo.hold,
+        currentBlock.tempo.up,
+        currentBlock.tempo.pause
       ];
     }
     return null;
@@ -70,16 +74,6 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
     return -1;
   };
 
-  // Auto-scroll to current activity
-  useEffect(() => {
-    if (activityListRef.current) {
-      const currentElement = activityListRef.current.children[currentActivityIndex] as HTMLElement;
-      if (currentElement) {
-        currentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }
-  }, [currentActivityIndex]);
-
   // Auto-start workout when component mounts
   useEffect(() => {
     if (!isRunning && !isCompleted) {
@@ -87,21 +81,102 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
     }
   }, []);
 
-  const renderActivitySummary = (activity: any, index: number) => {
-    const isActive = index === currentActivityIndex;
+  // Auto-scroll to current activity when it changes
+  useEffect(() => {
+    if (timelineRef.current && currentActivityIndex >= 0) {
+      const currentActivityElement = timelineRef.current.querySelector(`[data-activity-index="${currentActivityIndex}"]`);
+      if (currentActivityElement) {
+        currentActivityElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    }
+  }, [currentActivityIndex]);
+
+  const toggleBlockExpansion = (blockIndex: number) => {
+    setExpandedBlocks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(blockIndex)) {
+        newSet.delete(blockIndex);
+      } else {
+        newSet.add(blockIndex);
+      }
+      return newSet;
+    });
+  };
+
+  const renderBlockSummary = (blockIndex: number) => {
+    const block = fullWorkout.workoutBlocks[blockIndex];
+    const isExpanded = expandedBlocks.has(blockIndex);
+    const isCurrentBlock = blockIndex === currentBlockIndex;
+
+    return (
+      <div key={blockIndex} className="border-b border-gray-200" data-block-index={blockIndex}>
+        {/* Block Header */}
+        <div
+          onClick={() => toggleBlockExpansion(blockIndex)}
+          className={`p-4 cursor-pointer transition-colors ${
+            isCurrentBlock 
+              ? 'bg-blue-50 border-l-4 border-l-blue-500' 
+              : 'hover:bg-gray-50'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div>
+                <span className="font-semibold">
+                  Block {blockIndex + 1}: {block.exerciseName}
+                </span>
+                <span className="text-sm text-gray-600 ml-2">
+                  ({block.sets} sets, {block.reps} reps)
+                </span>
+              </div>
+            </div>
+            
+            {/* Block summary when collapsed */}
+            {!isExpanded && (
+              <div className="text-sm text-gray-500">
+                {block.sets} sets • {block.reps} reps • {block.tempo.down}{block.tempo.hold}{block.tempo.up}{block.tempo.pause} tempo
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Expanded Block Details */}
+        {isExpanded && (
+          <div className="bg-gray-50">
+            <div className="pl-8 pr-4 py-2">
+              {activities
+                .filter(activity => activity.blockIndex === blockIndex)
+                .map((activity, localIndex) => {
+                  const globalIndex = activities.findIndex(a => a.id === activity.id);
+                  return renderActivitySummary(activity, globalIndex, blockIndex);
+                })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderActivitySummary = (activity: { id: string; type: 'prep' | 'exercise' | 'rest'; name: string; setNumber?: number; blockIndex: number }, globalActivityIndex: number, blockIndex: number) => {
+    const isActive = globalActivityIndex === currentActivityIndex;
+    const block = fullWorkout.workoutBlocks[blockIndex];
     
     if (activity.type === 'prep') {
       return (
         <div
           key={activity.id}
-          onClick={() => jumpToActivity(index)}
+          data-activity-index={globalActivityIndex}
+          onClick={() => !isLocked && jumpToActivity(globalActivityIndex)}
           className={`p-3 border-b border-gray-200 cursor-pointer transition-colors ${
-            isActive ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-50'
+            isActive ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-100'
           } ${isLocked ? 'cursor-not-allowed opacity-60' : ''}`}
         >
           <div className="flex justify-between items-center">
             <span className="font-medium">Prep</span>
-            <span className="text-gray-600">{workoutBlock.prepSeconds} sec</span>
+            <span className="text-gray-600 text-sm">{block.prepSeconds}s</span>
           </div>
         </div>
       );
@@ -111,14 +186,20 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
       return (
         <div
           key={activity.id}
-          onClick={() => jumpToActivity(index)}
+          data-activity-index={globalActivityIndex}
+          onClick={() => !isLocked && jumpToActivity(globalActivityIndex)}
           className={`p-3 border-b border-gray-200 cursor-pointer transition-colors ${
-            isActive ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-50'
+            isActive ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-100'
           } ${isLocked ? 'cursor-not-allowed opacity-60' : ''}`}
         >
           <div className="flex justify-between items-center">
-            <span className="font-medium">Rest</span>
-            <span className="text-gray-600">{workoutBlock.restSeconds} sec</span>
+            <div>
+              <span className="font-medium">Rest</span>
+              <span className="text-sm text-gray-600 ml-2">
+                (after set {activity.setNumber})
+              </span>
+            </div>
+            <span className="text-gray-600 text-sm">{block.restSeconds}s</span>
           </div>
         </div>
       );
@@ -128,23 +209,22 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
       return (
         <div
           key={activity.id}
-          onClick={() => jumpToActivity(index)}
+          data-activity-index={globalActivityIndex}
+          onClick={() => !isLocked && jumpToActivity(globalActivityIndex)}
           className={`p-3 border-b border-gray-200 cursor-pointer transition-colors ${
-            isActive ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-50'
+            isActive ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-100'
           } ${isLocked ? 'cursor-not-allowed opacity-60' : ''}`}
         >
           <div className="flex justify-between items-center">
             <div>
-              <span className="font-medium">{workoutBlock.exerciseName}</span>
-              <span className="text-sm text-gray-600 ml-2">
-                set {activity.setNumber} of {workoutBlock.sets} • {workoutBlock.reps} reps
-              </span>
+              <span className="font-medium">Set {activity.setNumber} of {block.sets}</span>
+              <span className="text-sm text-gray-600 ml-2">{block.reps} reps</span>
             </div>
-            <div className="flex gap-1 text-sm">
-              <span>{workoutBlock.tempo.down}</span>
-              <span>{workoutBlock.tempo.hold}</span>
-              <span>{workoutBlock.tempo.up}</span>
-              <span>{workoutBlock.tempo.pause}</span>
+            <div className="flex gap-1 text-sm text-gray-600">
+              <span>{block.tempo.down}</span>
+              <span>{block.tempo.hold}</span>
+              <span>{block.tempo.up}</span>
+              <span>{block.tempo.pause}</span>
             </div>
           </div>
         </div>
@@ -157,12 +237,15 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
   if (isCompleted) {
     return (
       <div className="max-w-4xl mx-auto text-center py-12">
-        <h2 className="text-3xl font-bold text-green-600 mb-4">Workout Complete!</h2>
+        <h2 className="text-3xl font-bold text-green-600 mb-4">🎉 Workout Complete!</h2>
+        <p className="text-lg text-gray-600 mb-6">
+          Finished in {formatDuration(globalElapsed)}
+        </p>
         <button
           onClick={onBack}
           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg"
         >
-          Back to Setup
+          Back to Build Workout
         </button>
       </div>
     );
@@ -173,7 +256,7 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
       {/* Header with Lock and Pause */}
       <div className="flex justify-between items-center mb-4">
         <div>
-          <h1 className="text-2xl font-bold">Workout</h1>
+          <h1 className="text-2xl font-bold">Workout Timer</h1>
           <div className="text-sm text-gray-600 mt-1">
             Time Remaining: <span className="font-mono font-semibold">{formatDuration(getWorkoutTimeRemaining())}</span>
           </div>
@@ -207,7 +290,7 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
       {/* Global Timer Debug Display */}
       {showDebug && (
         <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-4 mb-4">
-          <h3 className="text-sm font-semibold text-yellow-800 mb-2">🐛 Global Timer Debug</h3>
+          <h3 className="text-sm font-semibold text-yellow-800 mb-2">🐛 Workout Timer Debug</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-sm">
             <div>
               <span className="text-yellow-700 font-medium">Global Elapsed:</span>
@@ -219,6 +302,12 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
               <span className="text-yellow-700 font-medium">Current Segment:</span>
               <div className="text-yellow-900 font-mono">
                 {currentSegmentIndex + 1} / {totalSegments}
+              </div>
+            </div>
+            <div>
+              <span className="text-yellow-700 font-medium">Current Block:</span>
+              <div className="text-yellow-900 font-mono">
+                {currentBlockIndex + 1} / {fullWorkout.workoutBlocks.length}
               </div>
             </div>
             <div>
@@ -244,13 +333,18 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
       )}
 
       {/* Current Activity Display */}
-      <div className="bg-blue rounded-lg shadow-md p-6 mb-4">
+      <div className="bg-white rounded-lg shadow-md p-6 mb-4">
         {/* Activity Name at top */}
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold">{currentActivity?.name}</h2>
           {currentActivity?.type === 'rest' && (
             <p className="text-lg text-gray-600">
               Set {getCurrentSet()} → Set {getCurrentSet() + 1}
+            </p>
+          )}
+          {currentActivity?.type === 'exercise' && (
+            <p className="text-lg text-gray-600">
+              Set {getCurrentSet()} of {getCurrentBlock().sets}
             </p>
           )}
         </div>
@@ -267,7 +361,7 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
                       {currentRep}
                     </span>
                     <span className="text-sm sm:text-base md:text-lg text-gray-600 ml-1">
-                      / {workoutBlock.reps}
+                      / {getCurrentBlock().reps}
                     </span>
                   </div>
                 </div>
@@ -330,9 +424,9 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
         )}
       </div>
 
-      {/* Activity List */}
-      <div className="bg-white rounded-lg shadow-md max-h-96 overflow-y-auto" ref={activityListRef}>
-        {activities.map((activity, index) => renderActivitySummary(activity, index))}
+      {/* Block Timeline */}
+      <div className="bg-white rounded-lg shadow-md max-h-96 overflow-y-auto" ref={timelineRef}>
+        {fullWorkout.workoutBlocks.map((_, blockIndex) => renderBlockSummary(blockIndex))}
       </div>
 
       {/* Back Button */}
@@ -341,7 +435,7 @@ export default function WorkoutTimer({ workoutBlock, onBack }: WorkoutTimerProps
           onClick={onBack}
           className="text-gray-600 hover:text-gray-800 underline"
         >
-          Back to Setup
+          Back to Build Workout
         </button>
       </div>
     </div>

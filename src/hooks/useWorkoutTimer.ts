@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { setInterval, clearInterval } from 'worker-timers';
-import { WorkoutBlock, TempoPhase } from '../types/workout';
+import { FullWorkout, WorkoutBlock, TempoPhase } from '../types/workout';
 
 // Using worker-timers for more accurate timing that isn't affected by:
 // - Browser throttling in background tabs
@@ -12,10 +12,12 @@ interface WorkoutActivity {
   type: 'prep' | 'exercise' | 'rest';
   name: string;
   setNumber?: number;
+  blockIndex: number;
 }
 
 interface WorkoutSegment {
   activityIndex: number;
+  blockIndex: number;
   rep: number;
   phase: TempoPhase | 'prep' | 'rest';
   duration: number;
@@ -25,6 +27,7 @@ interface WorkoutSegment {
 
 interface WorkoutTimerState {
   currentActivityIndex: number;
+  currentBlockIndex: number;
   currentRep: number;
   currentTempoPhase: TempoPhase;
   timeRemaining: number;
@@ -39,9 +42,10 @@ interface WorkoutTimerState {
   pauseStartTime: number;
 }
 
-export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
+export function useWorkoutTimer(fullWorkout: FullWorkout) {
   const [state, setState] = useState<WorkoutTimerState>({
     currentActivityIndex: 0,
+    currentBlockIndex: 0,
     currentRep: 1,
     currentTempoPhase: 'down',
     timeRemaining: 0,
@@ -57,41 +61,46 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
 
   const segmentsRef = useRef<WorkoutSegment[]>([]);
   
-  // Generate the workout activities (set-level only)
+  // Generate the workout activities for all blocks
   const generateWorkoutActivities = useCallback((): WorkoutActivity[] => {
     const activities: WorkoutActivity[] = [];
     
-    // Add prep phase
-    if (workoutBlock.prepSeconds > 0) {
-      activities.push({
-        id: 'prep',
-        type: 'prep',
-        name: 'Prep'
-      });
-    }
-
-    // Add sets with rests
-    for (let set = 1; set <= workoutBlock.sets; set++) {
-      activities.push({
-        id: `set-${set}`,
-        type: 'exercise',
-        name: workoutBlock.exerciseName,
-        setNumber: set
-      });
-
-      // Add rest between sets (except after the last set)
-      if (set < workoutBlock.sets && workoutBlock.restSeconds > 0) {
+    fullWorkout.workoutBlocks.forEach((block, blockIndex) => {
+      // Add prep phase for each block
+      if (block.prepSeconds > 0) {
         activities.push({
-          id: `rest-${set}`,
-          type: 'rest',
-          name: 'Rest',
-          setNumber: set
+          id: `block-${blockIndex}-prep`,
+          type: 'prep',
+          name: 'Prep',
+          blockIndex
         });
       }
-    }
+
+      // Add sets with rests for each block
+      for (let set = 1; set <= block.sets; set++) {
+        activities.push({
+          id: `block-${blockIndex}-set-${set}`,
+          type: 'exercise',
+          name: block.exerciseName,
+          setNumber: set,
+          blockIndex
+        });
+
+        // Add rest between sets (except after the last set of each block)
+        if (set < block.sets && block.restSeconds > 0) {
+          activities.push({
+            id: `block-${blockIndex}-rest-${set}`,
+            type: 'rest',
+            name: 'Rest',
+            setNumber: set,
+            blockIndex
+          });
+        }
+      }
+    });
 
     return activities;
-  }, [workoutBlock]);
+  }, [fullWorkout]);
 
   // Generate all workout segments with precise timing
   const generateWorkoutSegments = useCallback((): WorkoutSegment[] => {
@@ -101,40 +110,44 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
 
     for (let activityIndex = 0; activityIndex < activities.length; activityIndex++) {
       const activity = activities[activityIndex];
+      const block = fullWorkout.workoutBlocks[activity.blockIndex];
 
       if (activity.type === 'prep') {
-        if (workoutBlock.prepSeconds > 0) {
+        if (block.prepSeconds > 0) {
           segments.push({
             activityIndex,
+            blockIndex: activity.blockIndex,
             rep: 1,
             phase: 'prep',
-            duration: workoutBlock.prepSeconds * 1000,
+            duration: block.prepSeconds * 1000,
             startTime: currentTime,
-            endTime: currentTime + (workoutBlock.prepSeconds * 1000)
+            endTime: currentTime + (block.prepSeconds * 1000)
           });
-          currentTime += workoutBlock.prepSeconds * 1000;
+          currentTime += block.prepSeconds * 1000;
         }
       } else if (activity.type === 'rest') {
-        if (workoutBlock.restSeconds > 0) {
+        if (block.restSeconds > 0) {
           segments.push({
             activityIndex,
+            blockIndex: activity.blockIndex,
             rep: 1,
             phase: 'rest',
-            duration: workoutBlock.restSeconds * 1000,
+            duration: block.restSeconds * 1000,
             startTime: currentTime,
-            endTime: currentTime + (workoutBlock.restSeconds * 1000)
+            endTime: currentTime + (block.restSeconds * 1000)
           });
-          currentTime += workoutBlock.restSeconds * 1000;
+          currentTime += block.restSeconds * 1000;
         }
       } else if (activity.type === 'exercise') {
         // Generate segments for each rep
-        for (let rep = 1; rep <= workoutBlock.reps; rep++) {
+        for (let rep = 1; rep <= block.reps; rep++) {
           const phases: TempoPhase[] = ['down', 'hold', 'up', 'pause'];
           
           for (const phase of phases) {
-            const duration = workoutBlock.tempo[phase] * 1000;
+            const duration = block.tempo[phase] * 1000;
             segments.push({
               activityIndex,
+              blockIndex: activity.blockIndex,
               rep,
               phase,
               duration,
@@ -148,7 +161,7 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
     }
 
     return segments;
-  }, [workoutBlock, generateWorkoutActivities]);
+  }, [fullWorkout, generateWorkoutActivities]);
 
   // Calculate total workout duration
   const getTotalWorkoutDuration = useCallback((): number => {
@@ -164,6 +177,7 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
   const activities = generateWorkoutActivities();
   const currentActivity = activities[state.currentActivityIndex];
   const totalWorkoutDuration = getTotalWorkoutDuration();
+  const getCurrentBlock = () => fullWorkout.workoutBlocks[state.currentBlockIndex];
 
   // Global timer - runs at 20ms intervals using worker-timers for accurate, drift-free timing
   useEffect(() => {
@@ -199,40 +213,27 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
       const currentSegment = segments[currentSegmentIndex];
       if (!currentSegment) return;
 
-      // Calculate remaining time for current segment
-      const segmentElapsed = elapsed - currentSegment.startTime;
-      const timeRemaining = Math.max(0, Math.ceil((currentSegment.duration - segmentElapsed) / 1000));
-
-      // Check if we need to advance to next segment
-      if (elapsed >= currentSegment.endTime && currentSegmentIndex < segments.length - 1) {
-        currentSegmentIndex++;
-      }
-
-      const nextSegment = segments[currentSegmentIndex];
-      if (!nextSegment) return;
-
+      // Calculate time remaining in current segment
+      const timeRemaining = Math.max(0, Math.ceil((currentSegment.endTime - elapsed) / 1000));
+      
+      // Update state
       setState(prev => ({
         ...prev,
-        currentActivityIndex: nextSegment.activityIndex,
-        currentRep: nextSegment.rep,
-        currentTempoPhase: nextSegment.phase === 'prep' || nextSegment.phase === 'rest' ? prev.currentTempoPhase : nextSegment.phase as TempoPhase,
-        timeRemaining,
         globalElapsed: elapsed,
-        currentSegmentIndex
+        currentSegmentIndex,
+        currentActivityIndex: currentSegment.activityIndex,
+        currentBlockIndex: currentSegment.blockIndex,
+        currentRep: currentSegment.rep,
+        currentTempoPhase: currentSegment.phase as TempoPhase,
+        timeRemaining
       }));
-    }, 50); // 50ms for smooth updates
+    }, 20);
 
     return () => clearInterval(timerInterval);
-  }, [state.isRunning, state.isPaused, state.startTime, state.pausedTime]);
+  }, [state.isRunning, state.isPaused, state.startTime, state.pausedTime, state.currentSegmentIndex]);
 
   const startWorkout = () => {
     const now = Date.now();
-    const segments = segmentsRef.current;
-    
-    if (segments.length === 0) return;
-    
-    const firstSegment = segments[0];
-    
     setState(prev => ({
       ...prev,
       isRunning: true,
@@ -240,34 +241,29 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
       startTime: now,
       pausedTime: 0,
       globalElapsed: 0,
-      currentActivityIndex: firstSegment.activityIndex,
-      currentRep: firstSegment.rep,
-      currentTempoPhase: firstSegment.phase === 'prep' || firstSegment.phase === 'rest' ? 'down' : firstSegment.phase as TempoPhase,
-      timeRemaining: Math.ceil(firstSegment.duration / 1000),
       currentSegmentIndex: 0,
-      pauseStartTime: 0
+      currentActivityIndex: 0,
+      currentBlockIndex: 0,
+      currentRep: 1,
+      currentTempoPhase: 'down'
     }));
   };
 
   const pauseWorkout = () => {
-    const now = Date.now();
-    setState(prev => ({ 
-      ...prev, 
+    setState(prev => ({
+      ...prev,
       isPaused: true,
-      pauseStartTime: now
+      pauseStartTime: Date.now()
     }));
   };
 
   const resumeWorkout = () => {
-    const now = Date.now();
     setState(prev => {
-      const pauseDuration = prev.pauseStartTime > 0 ? now - prev.pauseStartTime : 0;
-      const validPauseDuration = Math.max(0, pauseDuration);
-      
+      const pauseDuration = Date.now() - prev.pauseStartTime;
       return {
         ...prev,
         isPaused: false,
-        pausedTime: prev.pausedTime + validPauseDuration,
+        pausedTime: prev.pausedTime + pauseDuration,
         pauseStartTime: 0
       };
     });
@@ -282,33 +278,39 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
     
     const segments = segmentsRef.current;
     const targetSegment = segments.find(s => s.activityIndex === activityIndex);
-    
-    if (targetSegment) {
-      const now = Date.now();
-      setState(prev => ({
-        ...prev,
-        startTime: now - targetSegment.startTime,
-        pausedTime: 0,
-        globalElapsed: targetSegment.startTime,
-        currentActivityIndex: targetSegment.activityIndex,
-        currentRep: targetSegment.rep,
-        currentTempoPhase: targetSegment.phase === 'prep' || targetSegment.phase === 'rest' ? 'down' : targetSegment.phase as TempoPhase,
-        timeRemaining: Math.ceil(targetSegment.duration / 1000),
-        currentSegmentIndex: segments.indexOf(targetSegment)
-      }));
-    }
+    if (!targetSegment) return;
+
+    const pauseDuration = state.isPaused ? Date.now() - state.pauseStartTime : 0;
+    const newPausedTime = state.pausedTime + pauseDuration;
+    const newStartTime = Date.now() - targetSegment.startTime - newPausedTime;
+
+    setState(prev => ({
+      ...prev,
+      startTime: newStartTime,
+      pausedTime: newPausedTime,
+      pauseStartTime: state.isPaused ? Date.now() : 0,
+      currentActivityIndex: activityIndex,
+      currentBlockIndex: targetSegment.blockIndex
+    }));
   };
 
   const getCurrentSet = () => {
-    return currentActivity?.setNumber || 1;
+    if (currentActivity?.type === 'exercise') {
+      return currentActivity.setNumber || 1;
+    }
+    if (currentActivity?.type === 'rest') {
+      return currentActivity.setNumber || 1;
+    }
+    return 1;
   };
 
-  const isCompleted = !state.isRunning && state.globalElapsed > 0;
+  const isCompleted = !state.isRunning && state.globalElapsed > 0 && state.currentSegmentIndex >= segmentsRef.current.length - 1;
 
   return {
     activities,
     currentActivity,
     currentActivityIndex: state.currentActivityIndex,
+    currentBlockIndex: state.currentBlockIndex,
     currentRep: state.currentRep,
     currentTempoPhase: state.currentTempoPhase,
     timeRemaining: state.timeRemaining,
@@ -317,12 +319,12 @@ export function useWorkoutTimer(workoutBlock: WorkoutBlock) {
     isLocked: state.isLocked,
     isCompleted,
     getCurrentSet,
+    getCurrentBlock,
     startWorkout,
     pauseWorkout,
     resumeWorkout,
     toggleLock,
     jumpToActivity,
-    // Debug info
     globalElapsed: state.globalElapsed,
     currentSegmentIndex: state.currentSegmentIndex,
     totalSegments: segmentsRef.current.length,
