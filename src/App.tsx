@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import BuildWorkout from './components/BuildWorkout/BuildWorkout';
 import BlockLibrary from './components/BlockLibrary/BlockLibrary';
 import WorkoutBlockEditor from './components/WorkoutSetup/WorkoutSetup';
+import BlockTypeSelector from './components/WorkoutSetup/BlockTypeSelector';
 import WorkoutTimer from './components/WorkoutTimer/WorkoutTimer';
-import { WorkoutBlock, FullWorkout, NavigationContext } from './types/workout';
+import { WorkoutBlock, FullWorkout, NavigationContext, BlockType } from './types/workout';
 import { getSavedBlocks, saveWorkoutBlock, deleteWorkoutBlock, scheduleAutoSave } from './utils/storage';
 
-type Screen = 'build-workout' | 'block-library' | 'block-editor' | 'timer';
+type Screen = 'build-workout' | 'block-library' | 'block-type-selector' | 'block-editor' | 'timer';
 
 function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('build-workout');
@@ -16,6 +17,7 @@ function App() {
   const [editingBlockIndex, setEditingBlockIndex] = useState<number | null>(null);
   const [navigationContext, setNavigationContext] = useState<NavigationContext>('build-workout');
   const [savedBlocks, setSavedBlocks] = useState<WorkoutBlock[]>([]);
+  const [selectedBlockType, setSelectedBlockType] = useState<BlockType>('tempo');
 
   // Load saved blocks on app start
   useEffect(() => {
@@ -79,7 +81,16 @@ function App() {
     setEditingBlock(null);
     setEditingBlockIndex(null);
     setNavigationContext('block-library');
+    setCurrentScreen('block-type-selector');
+  };
+
+  const handleSelectBlockType = (blockType: BlockType) => {
+    setSelectedBlockType(blockType);
     setCurrentScreen('block-editor');
+  };
+
+  const handleBackFromBlockTypeSelector = () => {
+    setCurrentScreen('block-library');
   };
 
   const handleSaveBlock = (block: WorkoutBlock) => {
@@ -142,12 +153,20 @@ function App() {
           />
         )}
 
+        {currentScreen === 'block-type-selector' && (
+          <BlockTypeSelector
+            onSelectBlockType={handleSelectBlockType}
+            onCancel={handleBackFromBlockTypeSelector}
+          />
+        )}
+
         {currentScreen === 'block-editor' && (
           <WorkoutBlockEditor
             onSave={handleSaveBlock}
             onCancel={handleCancelBlockEdit}
             initialBlock={editingBlock || undefined}
             navigationContext={navigationContext}
+            blockType={editingBlock ? editingBlock.blockType : selectedBlockType}
           />
         )}
         

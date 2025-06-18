@@ -27,7 +27,9 @@ export default function BuildWorkout({
       reps: 8,
       sets: 3,
       restSeconds: 60,
-      tempo: { down: 3, hold: 1, up: 3, pause: 1 }
+      blockType: 'tempo',
+      tempo: { down: 3, hold: 1, up: 3, pause: 1 },
+      tempoFlipped: false
     },
     {
       id: '2',
@@ -36,7 +38,9 @@ export default function BuildWorkout({
       reps: 12,
       sets: 4,
       restSeconds: 45,
-      tempo: { down: 2, hold: 0, up: 2, pause: 0 }
+      blockType: 'tempo',
+      tempo: { down: 2, hold: 0, up: 2, pause: 0 },
+      tempoFlipped: false
     }
   ]);
 

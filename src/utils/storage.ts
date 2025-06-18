@@ -16,17 +16,42 @@ function safeJsonParse<T>(json: string, fallback: T): T {
     const parsed = JSON.parse(json);
     // Convert date strings back to Date objects
     if (parsed.savedBlocks) {
-      parsed.savedBlocks = parsed.savedBlocks.map((block: any) => ({
-        ...block,
-        createdAt: new Date(block.createdAt),
-        lastModified: new Date(block.lastModified)
-      }));
+      parsed.savedBlocks = parsed.savedBlocks.map((block: any) => {
+        const migratedBlock = {
+          ...block,
+          createdAt: new Date(block.createdAt),
+          lastModified: new Date(block.lastModified)
+        };
+        
+        // Migration: Add blockType for existing blocks
+        if (!migratedBlock.blockType) {
+          migratedBlock.blockType = 'tempo';
+        }
+        
+        // Migration: Add tempoFlipped for existing tempo blocks
+        if (migratedBlock.blockType === 'tempo' && migratedBlock.tempoFlipped === undefined) {
+          migratedBlock.tempoFlipped = false;
+        }
+        
+        return migratedBlock;
+      });
     }
     if (parsed.savedWorkouts) {
       parsed.savedWorkouts = parsed.savedWorkouts.map((workout: any) => ({
         ...workout,
         createdAt: new Date(workout.createdAt),
-        lastModified: new Date(workout.lastModified)
+        lastModified: new Date(workout.lastModified),
+        workoutBlocks: workout.workoutBlocks?.map((block: any) => {
+          // Migration: Add blockType for existing blocks in workouts
+          if (!block.blockType) {
+            block = { ...block, blockType: 'tempo' };
+          }
+          // Migration: Add tempoFlipped for existing tempo blocks in workouts
+          if (block.blockType === 'tempo' && block.tempoFlipped === undefined) {
+            block = { ...block, tempoFlipped: false };
+          }
+          return block;
+        }) || []
       }));
     }
     return parsed;

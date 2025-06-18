@@ -15,8 +15,42 @@ export default function WorkoutBlockCard({
   onClick,
   className = ""
 }: WorkoutBlockCardProps) {
-  const formatTempo = (tempo: WorkoutBlock['tempo']) => {
+  const formatTempo = (tempo: NonNullable<WorkoutBlock['tempo']>) => {
     return `${tempo.down}${tempo.hold}${tempo.up}${tempo.pause}`;
+  };
+
+  const formatTwoStep = (twoStep: NonNullable<WorkoutBlock['twoStep']>) => {
+    return `${twoStep.contract}${twoStep.relax}`;
+  };
+
+  const formatStretch = (stretch: NonNullable<WorkoutBlock['stretch']>) => {
+    return `${stretch.hold}s`;
+  };
+
+  const getTimingDisplay = () => {
+    switch (block.blockType) {
+      case 'tempo':
+        return block.tempo ? `${formatTempo(block.tempo)} tempo` : 'tempo';
+      case '2-step':
+        return block.twoStep ? `${formatTwoStep(block.twoStep)} 2-step` : '2-step';
+      case 'stretch':
+        return block.stretch ? `${formatStretch(block.stretch)} stretch` : 'stretch';
+      default:
+        return 'timing';
+    }
+  };
+
+  const getBlockTypeIcon = () => {
+    switch (block.blockType) {
+      case 'tempo':
+        return '🏋️';
+      case '2-step':
+        return '💪';
+      case 'stretch':
+        return '🧘';
+      default:
+        return '';
+    }
   };
 
   const handleCardClick = () => {
@@ -40,10 +74,11 @@ export default function WorkoutBlockCard({
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">{getBlockTypeIcon()}</span>
             <h3 className="font-semibold text-gray-800">{block.exerciseName}</h3>
           </div>
           <div className="text-sm text-gray-600">
-            {block.sets} sets • {block.reps} reps • {block.prepSeconds}s prep • {formatTempo(block.tempo)} tempo • {block.restSeconds}s rest
+            {block.sets} sets{block.blockType !== 'stretch' ? ` • ${block.reps} reps` : ''} • {block.prepSeconds}s prep • {getTimingDisplay()} • {block.restSeconds}s rest
           </div>
         </div>
         

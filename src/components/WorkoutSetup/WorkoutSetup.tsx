@@ -1,35 +1,76 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import NumberInput from '../shared/NumberInput';
 import TempoInput from './TempoInput';
-import { WorkoutBlock, NavigationContext } from '../../types/workout';
+import TwoStepInput from './TwoStepInput';
+import StretchInput from './StretchInput';
+import { WorkoutBlock, NavigationContext, BlockType } from '../../types/workout';
 
 interface WorkoutBlockEditorProps {
   onSave: (workout: WorkoutBlock) => void;
   onCancel: () => void;
   initialBlock?: WorkoutBlock;
   navigationContext?: NavigationContext;
+  blockType?: BlockType;
 }
 
 export default function WorkoutBlockEditor({ 
   onSave, 
   onCancel,
   initialBlock,
-  navigationContext = 'build-workout'
+  navigationContext = 'build-workout',
+  blockType = 'tempo'
 }: WorkoutBlockEditorProps) {
-  const [workout, setWorkout] = useState<WorkoutBlock>(initialBlock || {
-    id: crypto.randomUUID(),
-    exerciseName: 'Squats',
-    prepSeconds: 10,
-    reps: 8,
-    sets: 3,
-    restSeconds: 60,
-    tempo: {
-      down: 3,
-      hold: 1,
-      up: 3,
-      pause: 1
+  
+  const createDefaultBlock = (type: BlockType): WorkoutBlock => {
+    const baseBlock = {
+      id: crypto.randomUUID(),
+      exerciseName: 'Exercise',
+      prepSeconds: 10,
+      reps: 8,
+      sets: 3,
+      restSeconds: 60,
+      blockType: type
+    };
+
+    switch (type) {
+      case 'tempo':
+        return {
+          ...baseBlock,
+          exerciseName: 'Squats',
+          tempo: { down: 3, hold: 1, up: 3, pause: 1 },
+          tempoFlipped: false
+        };
+      case '2-step':
+        return {
+          ...baseBlock,
+          exerciseName: 'Planks',
+          twoStep: { contract: 3, relax: 3 }
+        };
+      case 'stretch':
+        return {
+          ...baseBlock,
+          exerciseName: 'Hamstring Stretch',
+          reps: 1,
+          stretch: { hold: 30 }
+        };
+      default:
+        return {
+          ...baseBlock,
+          tempo: { down: 3, hold: 1, up: 3, pause: 1 }
+        };
     }
-  });
+  };
+
+  const [workout, setWorkout] = useState<WorkoutBlock>(
+    initialBlock || createDefaultBlock(blockType)
+  );
+
+  // Auto-set reps to 1 for stretch blocks
+  useEffect(() => {
+    if (workout.blockType === 'stretch' && workout.reps !== 1) {
+      setWorkout(prev => ({ ...prev, reps: 1 }));
+    }
+  }, [workout.blockType]);
 
   const handleWorkoutChange = (field: keyof WorkoutBlock, value: any) => {
     setWorkout(prev => ({
@@ -46,6 +87,49 @@ export default function WorkoutBlockEditor({
     onCancel();
   };
 
+  const renderTimingInput = () => {
+    switch (workout.blockType) {
+      case 'tempo':
+        return workout.tempo && (
+          <TempoInput
+            tempo={workout.tempo}
+            onChange={(tempo) => handleWorkoutChange('tempo', tempo)}
+            isFlipped={workout.tempoFlipped || false}
+            onFlippedChange={(flipped) => handleWorkoutChange('tempoFlipped', flipped)}
+          />
+        );
+      case '2-step':
+        return workout.twoStep && (
+          <TwoStepInput
+            twoStep={workout.twoStep}
+            onChange={(twoStep) => handleWorkoutChange('twoStep', twoStep)}
+          />
+        );
+      case 'stretch':
+        return workout.stretch && (
+          <StretchInput
+            stretch={workout.stretch}
+            onChange={(stretch) => handleWorkoutChange('stretch', stretch)}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  const getBlockTypeDisplay = () => {
+    switch (workout.blockType) {
+      case 'tempo':
+        return 'Tempo Block';
+      case '2-step':
+        return '2-Step Block';
+      case 'stretch':
+        return 'Stretch Block';
+      default:
+        return 'Workout Block';
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -57,7 +141,7 @@ export default function WorkoutBlockEditor({
             ← Back
           </button>
           <h2 className="text-xl font-semibold text-center text-gray-800 flex-1">
-            Workout Block
+            {getBlockTypeDisplay()}
           </h2>
           <div className="w-16"></div> {/* Spacer for centering */}
         </div>
@@ -90,22 +174,21 @@ export default function WorkoutBlockEditor({
             />
           </div>
 
-          {/* Reps */}
-          <div className="flex flex-col items-center">
-            <NumberInput
-              value={workout.reps}
-              onChange={(value) => handleWorkoutChange('reps', value)}
-              min={1}
-              max={99}
-              label="Reps"
-            />
-          </div>
+          {/* Reps - only show for tempo and 2-step blocks */}
+          {workout.blockType !== 'stretch' && (
+            <div className="flex flex-col items-center">
+              <NumberInput
+                value={workout.reps}
+                onChange={(value) => handleWorkoutChange('reps', value)}
+                min={1}
+                max={99}
+                label="Reps"
+              />
+            </div>
+          )}
 
-          {/* Tempo Block */}
-          <TempoInput
-            tempo={workout.tempo}
-            onChange={(tempo) => handleWorkoutChange('tempo', tempo)}
-          />
+          {/* Timing Block - varies by block type */}
+          {renderTimingInput()}
 
           {/* Sets and Rest grouped together */}
           <div className="flex gap-2">

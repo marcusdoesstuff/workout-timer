@@ -139,22 +139,82 @@ export function useWorkoutTimer(fullWorkout: FullWorkout) {
           currentTime += block.restSeconds * 1000;
         }
       } else if (activity.type === 'exercise') {
-        // Generate segments for each rep
+        // Generate segments for each rep based on block type
         for (let rep = 1; rep <= block.reps; rep++) {
-          const phases: TempoPhase[] = ['down', 'hold', 'up', 'pause'];
-          
-          for (const phase of phases) {
-            const duration = block.tempo[phase] * 1000;
-            segments.push({
-              activityIndex,
-              blockIndex: activity.blockIndex,
-              rep,
-              phase,
-              duration,
-              startTime: currentTime,
-              endTime: currentTime + duration
-            });
-            currentTime += duration;
+          switch (block.blockType) {
+            case 'tempo':
+              if (block.tempo) {
+                const tempoPhases: (keyof NonNullable<WorkoutBlock['tempo']>)[] = ['down', 'hold', 'up', 'pause'];
+                for (const phase of tempoPhases) {
+                  const duration = block.tempo[phase] * 1000;
+                  segments.push({
+                    activityIndex,
+                    blockIndex: activity.blockIndex,
+                    rep,
+                    phase: phase as TempoPhase,
+                    duration,
+                    startTime: currentTime,
+                    endTime: currentTime + duration
+                  });
+                  currentTime += duration;
+                }
+              }
+              break;
+              
+            case '2-step':
+              if (block.twoStep) {
+                const twoStepPhases: (keyof NonNullable<WorkoutBlock['twoStep']>)[] = ['contract', 'relax'];
+                for (const phase of twoStepPhases) {
+                  const duration = block.twoStep[phase] * 1000;
+                  segments.push({
+                    activityIndex,
+                    blockIndex: activity.blockIndex,
+                    rep,
+                    phase: phase as TempoPhase,
+                    duration,
+                    startTime: currentTime,
+                    endTime: currentTime + duration
+                  });
+                  currentTime += duration;
+                }
+              }
+              break;
+              
+            case 'stretch':
+              if (block.stretch) {
+                const duration = block.stretch.hold * 1000;
+                segments.push({
+                  activityIndex,
+                  blockIndex: activity.blockIndex,
+                  rep,
+                  phase: 'stretch' as TempoPhase,
+                  duration,
+                  startTime: currentTime,
+                  endTime: currentTime + duration
+                });
+                currentTime += duration;
+              }
+              break;
+              
+            default:
+              // Fallback to tempo for unknown types
+              if (block.tempo) {
+                const tempoPhases: (keyof NonNullable<WorkoutBlock['tempo']>)[] = ['down', 'hold', 'up', 'pause'];
+                for (const phase of tempoPhases) {
+                  const duration = block.tempo[phase] * 1000;
+                  segments.push({
+                    activityIndex,
+                    blockIndex: activity.blockIndex,
+                    rep,
+                    phase: phase as TempoPhase,
+                    duration,
+                    startTime: currentTime,
+                    endTime: currentTime + duration
+                  });
+                  currentTime += duration;
+                }
+              }
+              break;
           }
         }
       }

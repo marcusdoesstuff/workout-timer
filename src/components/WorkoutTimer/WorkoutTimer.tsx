@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { FullWorkout } from '../../types/workout';
+import { FullWorkout, WorkoutBlock } from '../../types/workout';
 import { useWorkoutTimer } from '../../hooks/useWorkoutTimer';
 import ProgressCircle from '../shared/ProgressCircle';
 
@@ -53,25 +53,134 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
     return Math.max(0, totalWorkoutDuration - globalElapsed);
   };
 
-  const getTempoDisplay = () => {
+  const getTimingDisplay = () => {
     if (currentActivity?.type === 'exercise') {
       const currentBlock = getCurrentBlock();
-      return [
-        currentBlock.tempo.down,
-        currentBlock.tempo.hold,
-        currentBlock.tempo.up,
-        currentBlock.tempo.pause
-      ];
+      switch (currentBlock.blockType) {
+        case 'tempo':
+          return currentBlock.tempo ? (
+            currentBlock.tempoFlipped ? [
+              currentBlock.tempo.up,
+              currentBlock.tempo.hold,
+              currentBlock.tempo.down,
+              currentBlock.tempo.pause
+            ] : [
+              currentBlock.tempo.down,
+              currentBlock.tempo.hold,
+              currentBlock.tempo.up,
+              currentBlock.tempo.pause
+            ]
+          ) : null;
+        case '2-step':
+          return currentBlock.twoStep ? [
+            currentBlock.twoStep.contract,
+            currentBlock.twoStep.relax
+          ] : null;
+        case 'stretch':
+          return currentBlock.stretch ? [currentBlock.stretch.hold] : null;
+        default:
+          return null;
+      }
     }
     return null;
   };
 
   const getCurrentPhaseIndex = () => {
     if (currentActivity?.type === 'exercise') {
-      const phases = ['down', 'hold', 'up', 'pause'];
-      return phases.indexOf(currentTempoPhase);
+      const currentBlock = getCurrentBlock();
+      switch (currentBlock.blockType) {
+        case 'tempo':
+          if (currentBlock.tempoFlipped) {
+            const flippedPhases = ['up', 'hold', 'down', 'pause'];
+            return flippedPhases.indexOf(currentTempoPhase);
+          } else {
+            const tempoPhases = ['down', 'hold', 'up', 'pause'];
+            return tempoPhases.indexOf(currentTempoPhase);
+          }
+        case '2-step':
+          const twoStepPhases = ['contract', 'relax'];
+          return twoStepPhases.indexOf(currentTempoPhase);
+        case 'stretch':
+          return currentTempoPhase === 'stretch' ? 0 : -1;
+        default:
+          return -1;
+      }
     }
     return -1;
+  };
+
+  const getBlockTimingSummary = (block: WorkoutBlock) => {
+    switch (block.blockType) {
+      case 'tempo':
+        return block.tempo ? `${block.tempo.down}${block.tempo.hold}${block.tempo.up}${block.tempo.pause} tempo` : 'tempo';
+      case '2-step':
+        return block.twoStep ? `${block.twoStep.contract}${block.twoStep.relax} 2-step` : '2-step';
+      case 'stretch':
+        return block.stretch ? `${block.stretch.hold}s stretch` : 'stretch';
+      default:
+        return 'timing';
+    }
+  };
+
+  const getNextSectionPreview = (): number[] | null => {
+    // Find the next exercise activity
+    const nextExerciseIndex = activities.findIndex((activity, index) => 
+      index > currentActivityIndex && activity.type === 'exercise'
+    );
+    
+    if (nextExerciseIndex === -1) return null;
+    
+    const nextExercise = activities[nextExerciseIndex];
+    const nextBlock = fullWorkout.workoutBlocks[nextExercise.blockIndex];
+    
+    switch (nextBlock.blockType) {
+      case 'tempo':
+        return nextBlock.tempo ? (
+          nextBlock.tempoFlipped ? [
+            nextBlock.tempo.up,
+            nextBlock.tempo.hold,
+            nextBlock.tempo.down,
+            nextBlock.tempo.pause
+          ] : [
+            nextBlock.tempo.down,
+            nextBlock.tempo.hold,
+            nextBlock.tempo.up,
+            nextBlock.tempo.pause
+          ]
+        ) : null;
+      case '2-step':
+        return nextBlock.twoStep ? [
+          nextBlock.twoStep.contract,
+          nextBlock.twoStep.relax
+        ] : null;
+      case 'stretch':
+        return nextBlock.stretch ? [nextBlock.stretch.hold] : null;
+      default:
+        return null;
+    }
+  };
+
+  const getNextSectionLabels = (): string[] | null => {
+    // Find the next exercise activity
+    const nextExerciseIndex = activities.findIndex((activity, index) => 
+      index > currentActivityIndex && activity.type === 'exercise'
+    );
+    
+    if (nextExerciseIndex === -1) return null;
+    
+    const nextExercise = activities[nextExerciseIndex];
+    const nextBlock = fullWorkout.workoutBlocks[nextExercise.blockIndex];
+    
+    switch (nextBlock.blockType) {
+      case 'tempo':
+        return nextBlock.tempoFlipped ? ['Up', 'Hold', 'Down', 'Pause'] : ['Down', 'Hold', 'Up', 'Pause'];
+      case '2-step':
+        return ['Contract', 'Relax'];
+      case 'stretch':
+        return ['Stretch'];
+      default:
+        return null;
+    }
   };
 
   // Auto-start workout when component mounts
@@ -129,7 +238,7 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
                   Block {blockIndex + 1}: {block.exerciseName}
                 </span>
                 <span className="text-sm text-gray-600 ml-2">
-                  ({block.sets} sets, {block.reps} reps)
+                  ({block.sets} sets{block.blockType !== 'stretch' ? `, ${block.reps} reps` : ''})
                 </span>
               </div>
             </div>
@@ -137,7 +246,7 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
             {/* Block summary when collapsed */}
             {!isExpanded && (
               <div className="text-sm text-gray-500">
-                {block.sets} sets • {block.reps} reps • {block.tempo.down}{block.tempo.hold}{block.tempo.up}{block.tempo.pause} tempo
+                {block.sets} sets • {block.reps} reps • {getBlockTimingSummary(block)}
               </div>
             )}
           </div>
@@ -206,6 +315,35 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
     }
 
     if (activity.type === 'exercise') {
+      const getActivityTimingDisplay = (block: WorkoutBlock) => {
+        switch (block.blockType) {
+          case 'tempo':
+            return block.tempo ? (
+              <div className="flex gap-1 text-sm text-gray-600">
+                <span>{block.tempo.down}</span>
+                <span>{block.tempo.hold}</span>
+                <span>{block.tempo.up}</span>
+                <span>{block.tempo.pause}</span>
+              </div>
+            ) : null;
+          case '2-step':
+            return block.twoStep ? (
+              <div className="flex gap-1 text-sm text-gray-600">
+                <span>{block.twoStep.contract}</span>
+                <span>{block.twoStep.relax}</span>
+              </div>
+            ) : null;
+          case 'stretch':
+            return block.stretch ? (
+              <div className="flex gap-1 text-sm text-gray-600">
+                <span>{block.stretch.hold}s</span>
+              </div>
+            ) : null;
+          default:
+            return null;
+        }
+      };
+
       return (
         <div
           key={activity.id}
@@ -218,14 +356,11 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
           <div className="flex justify-between items-center">
             <div>
               <span className="font-medium">Set {activity.setNumber} of {block.sets}</span>
-              <span className="text-sm text-gray-600 ml-2">{block.reps} reps</span>
+              {block.blockType !== 'stretch' && (
+                <span className="text-sm text-gray-600 ml-2">{block.reps} reps</span>
+              )}
             </div>
-            <div className="flex gap-1 text-sm text-gray-600">
-              <span>{block.tempo.down}</span>
-              <span>{block.tempo.hold}</span>
-              <span>{block.tempo.up}</span>
-              <span>{block.tempo.pause}</span>
-            </div>
+            {getActivityTimingDisplay(block)}
           </div>
         </div>
       );
@@ -353,31 +488,33 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
           <div className="max-w-2xl mx-auto">
             {/* Reps and Tempo sections */}
             <div className="flex items-center justify-center gap-6 sm:gap-8 md:gap-12">
-              {/* Rep Counter - Large rounded block */}
-              <div className="text-center">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gray-200 rounded-2xl flex items-center justify-center">
-                  <div className="text-center">
-                    <span className="text-xl sm:text-2xl md:text-3xl font-bold text-blue-600">
-                      {currentRep}
-                    </span>
-                    <span className="text-sm sm:text-base md:text-lg text-gray-600 ml-1">
-                      / {getCurrentBlock().reps}
-                    </span>
+              {/* Rep Counter - Large rounded block (only show for non-stretch blocks) */}
+              {getCurrentBlock().blockType !== 'stretch' && (
+                <div className="text-center">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gray-200 rounded-2xl flex items-center justify-center">
+                    <div className="text-center">
+                      <span className="text-xl sm:text-2xl md:text-3xl font-bold text-blue-600">
+                        {currentRep}
+                      </span>
+                      <span className="text-sm sm:text-base md:text-lg text-gray-600 ml-1">
+                        / {getCurrentBlock().reps}
+                      </span>
+                    </div>
                   </div>
+                  <div className="text-xs text-gray-500 mt-2">Reps</div>
                 </div>
-                <div className="text-xs text-gray-500 mt-2">Reps</div>
-              </div>
+              )}
 
-              {/* Tempo Display - Larger circles */}
+              {/* Timing Display - Larger circles */}
               <div className="text-center">
                 <div className="relative mb-2">
                   <div className="flex gap-2 sm:gap-3 md:gap-4 justify-center">
-                    {getTempoDisplay()!.map((tempo, index) => {
+                    {getTimingDisplay()!.map((tempo, index) => {
                       const isCurrentPhase = index === getCurrentPhaseIndex();
                       
                       return (
                         <div key={index} className="relative">
-                          {/* Tempo circle - simple current phase highlighting */}
+                          {/* Tempo circle - shows countdown when active */}
                           <div
                             className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-lg sm:text-xl md:text-2xl font-semibold relative ${
                               isCurrentPhase
@@ -386,7 +523,7 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
                             }`}
                             style={{ zIndex: 1 }}
                           >
-                            {tempo}
+                            {isCurrentPhase ? timeRemaining : tempo}
                           </div>
                           
                           {/* Progress Circle Overlay - only for current phase */}
@@ -406,20 +543,67 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
                 
                 {/* Phase labels */}
                 <div className="flex gap-2 sm:gap-3 md:gap-4 text-xs text-gray-500 justify-center">
-                  <span className="w-16 sm:w-20 md:w-24 text-center">Down</span>
-                  <span className="w-16 sm:w-20 md:w-24 text-center">Hold</span>
-                  <span className="w-16 sm:w-20 md:w-24 text-center">Up</span>
-                  <span className="w-16 sm:w-20 md:w-24 text-center">Pause</span>
+                  {getCurrentBlock().blockType === 'tempo' && (
+                    <>
+                      {getCurrentBlock().tempoFlipped ? (
+                        <>
+                          <span className="w-16 sm:w-20 md:w-24 text-center">Up</span>
+                          <span className="w-16 sm:w-20 md:w-24 text-center">Hold</span>
+                          <span className="w-16 sm:w-20 md:w-24 text-center">Down</span>
+                          <span className="w-16 sm:w-20 md:w-24 text-center">Pause</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-16 sm:w-20 md:w-24 text-center">Down</span>
+                          <span className="w-16 sm:w-20 md:w-24 text-center">Hold</span>
+                          <span className="w-16 sm:w-20 md:w-24 text-center">Up</span>
+                          <span className="w-16 sm:w-20 md:w-24 text-center">Pause</span>
+                        </>
+                      )}
+                    </>
+                  )}
+                  {getCurrentBlock().blockType === '2-step' && (
+                    <>
+                      <span className="w-16 sm:w-20 md:w-24 text-center">Contract</span>
+                      <span className="w-16 sm:w-20 md:w-24 text-center">Relax</span>
+                    </>
+                  )}
+                  {getCurrentBlock().blockType === 'stretch' && (
+                    <span className="w-16 sm:w-20 md:w-24 text-center">Stretch</span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          /* Non-exercise activities - show timer normally */
+          /* Non-exercise activities - show timer with next section preview */
           <div className="text-center">
-            <div className="text-4xl font-bold text-blue-600">
+            <div className="text-4xl font-bold text-blue-600 mb-4">
               {formatTime(timeRemaining)}
             </div>
+            {/* Preview of next section */}
+            {getNextSectionPreview() && (
+              <div className="mt-4">
+                <div className="text-sm text-gray-600 mb-2">Next up:</div>
+                <div className="flex gap-2 justify-center">
+                  {getNextSectionPreview()!.map((value, index) => (
+                    <div
+                      key={index}
+                      className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600"
+                    >
+                      {value}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 justify-center mt-1">
+                  {getNextSectionLabels()!.map((label, index) => (
+                    <span key={index} className="w-8 text-xs text-gray-500 text-center">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
