@@ -6,6 +6,7 @@ import BlockTypeSelector from './components/WorkoutSetup/BlockTypeSelector';
 import WorkoutTimer from './components/WorkoutTimer/WorkoutTimer';
 import { WorkoutBlock, FullWorkout, NavigationContext, BlockType } from './types/workout';
 import { getSavedBlocks, saveWorkoutBlock, deleteWorkoutBlock, scheduleAutoSave } from './utils/storage';
+import { useCapacitor } from './hooks/useCapacitor';
 
 type Screen = 'build-workout' | 'block-library' | 'block-type-selector' | 'block-editor' | 'timer';
 
@@ -18,6 +19,9 @@ function App() {
   const [navigationContext, setNavigationContext] = useState<NavigationContext>('build-workout');
   const [savedBlocks, setSavedBlocks] = useState<WorkoutBlock[]>([]);
   const [selectedBlockType, setSelectedBlockType] = useState<BlockType>('tempo');
+  
+  // Initialize Capacitor features
+  useCapacitor();
 
   // Load saved blocks on app start
   useEffect(() => {

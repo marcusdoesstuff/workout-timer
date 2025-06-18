@@ -17,7 +17,6 @@ export default function WorkoutBlockEditor({
   onSave, 
   onCancel,
   initialBlock,
-  navigationContext = 'build-workout',
   blockType = 'tempo'
 }: WorkoutBlockEditorProps) {
   
@@ -161,51 +160,106 @@ export default function WorkoutBlockEditor({
           />
         </div>
 
-        {/* Horizontal Controls Layout */}
-        <div className="flex items-start justify-center gap-6 mb-8">
-          {/* Prep */}
-          <div className="flex flex-col items-center">
-            <NumberInput
-              value={workout.prepSeconds}
-              onChange={(value) => handleWorkoutChange('prepSeconds', value)}
-              min={0}
-              max={99}
-              label="Prep"
-            />
-          </div>
-
-          {/* Reps - only show for tempo and 2-step blocks */}
-          {workout.blockType !== 'stretch' && (
+        {/* Responsive Controls Layout */}
+        <div className="mb-8">
+          {/* Desktop Layout (md and up) */}
+          <div className="hidden md:flex items-start justify-center gap-6">
+            {/* Prep */}
             <div className="flex flex-col items-center">
               <NumberInput
-                value={workout.reps}
-                onChange={(value) => handleWorkoutChange('reps', value)}
-                min={1}
+                value={workout.prepSeconds}
+                onChange={(value) => handleWorkoutChange('prepSeconds', value)}
+                min={0}
                 max={99}
-                label="Reps"
+                label="Prep"
               />
             </div>
-          )}
 
-          {/* Timing Block - varies by block type */}
-          {renderTimingInput()}
+            {/* Reps - only show for tempo and 2-step blocks */}
+            {workout.blockType !== 'stretch' && (
+              <div className="flex flex-col items-center">
+                <NumberInput
+                  value={workout.reps}
+                  onChange={(value) => handleWorkoutChange('reps', value)}
+                  min={1}
+                  max={99}
+                  label="Reps"
+                />
+              </div>
+            )}
 
-          {/* Sets and Rest grouped together */}
-          <div className="flex gap-2">
-            <NumberInput
-              value={workout.sets}
-              onChange={(value) => handleWorkoutChange('sets', value)}
-              min={1}
-              max={99}
-              label="Sets"
-            />
-            <NumberInput
-              value={workout.restSeconds}
-              onChange={(value) => handleWorkoutChange('restSeconds', value)}
-              min={0}
-              max={999}
-              label="Rest(s)"
-            />
+            {/* Timing Block - varies by block type */}
+            {renderTimingInput()}
+
+            {/* Sets and Rest grouped together */}
+            <div className="flex gap-2">
+              <NumberInput
+                value={workout.sets}
+                onChange={(value) => handleWorkoutChange('sets', value)}
+                min={1}
+                max={99}
+                label="Sets"
+              />
+              <NumberInput
+                value={workout.restSeconds}
+                onChange={(value) => handleWorkoutChange('restSeconds', value)}
+                min={0}
+                max={999}
+                label="Rest(s)"
+              />
+            </div>
+          </div>
+
+          {/* Mobile Layout (below md) */}
+          <div className="md:hidden space-y-6">
+            {/* First row: Prep and Reps */}
+            <div className="flex justify-center gap-6">
+              <div className="flex flex-col items-center">
+                <NumberInput
+                  value={workout.prepSeconds}
+                  onChange={(value) => handleWorkoutChange('prepSeconds', value)}
+                  min={0}
+                  max={99}
+                  label="Prep"
+                />
+              </div>
+
+              {/* Reps - only show for tempo and 2-step blocks */}
+              {workout.blockType !== 'stretch' && (
+                <div className="flex flex-col items-center">
+                  <NumberInput
+                    value={workout.reps}
+                    onChange={(value) => handleWorkoutChange('reps', value)}
+                    min={1}
+                    max={99}
+                    label="Reps"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Second row: Timing Block */}
+            <div className="flex justify-center">
+              {renderTimingInput()}
+            </div>
+
+            {/* Third row: Sets and Rest */}
+            <div className="flex justify-center gap-6">
+              <NumberInput
+                value={workout.sets}
+                onChange={(value) => handleWorkoutChange('sets', value)}
+                min={1}
+                max={99}
+                label="Sets"
+              />
+              <NumberInput
+                value={workout.restSeconds}
+                onChange={(value) => handleWorkoutChange('restSeconds', value)}
+                min={0}
+                max={999}
+                label="Rest(s)"
+              />
+            </div>
           </div>
         </div>
 

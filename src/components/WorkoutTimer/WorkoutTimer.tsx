@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FullWorkout, WorkoutBlock } from '../../types/workout';
 import { useWorkoutTimer } from '../../hooks/useWorkoutTimer';
 import ProgressCircle from '../shared/ProgressCircle';
+import { useCapacitor } from '../../hooks/useCapacitor';
 
 interface WorkoutTimerProps {
   fullWorkout: FullWorkout;
@@ -33,6 +34,14 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
     totalSegments,
     totalWorkoutDuration
   } = useWorkoutTimer(fullWorkout);
+
+  const {
+    isNative,
+    triggerHapticFeedback,
+    keepScreenAwake,
+    allowScreenSleep,
+    ImpactStyle
+  } = useCapacitor();
 
   const timelineRef = useRef<HTMLDivElement>(null);
   const [showDebug, setShowDebug] = useState<boolean>(false);
@@ -190,6 +199,49 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
     }
   }, []);
 
+  // Keep screen awake during workout
+  useEffect(() => {
+    if (isRunning && !isPaused) {
+      keepScreenAwake();
+    } else {
+      allowScreenSleep();
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      allowScreenSleep();
+    };
+  }, [isRunning, isPaused, keepScreenAwake, allowScreenSleep]);
+
+  // Trigger haptic feedback on activity changes only
+  const prevActivityIndexRef = useRef<number>(-1);
+  useEffect(() => {
+    if (isNative && isRunning && currentActivityIndex !== prevActivityIndexRef.current && currentActivityIndex >= 0) {
+      // Only trigger haptic feedback when actually switching to a new activity
+      triggerHapticFeedback(ImpactStyle.Medium);
+      prevActivityIndexRef.current = currentActivityIndex;
+    }
+  }, [currentActivityIndex, isNative, isRunning, triggerHapticFeedback, ImpactStyle]);
+
+  // Haptic feedback for timer controls
+  const handlePauseResume = () => {
+    if (isNative) {
+      triggerHapticFeedback(ImpactStyle.Light);
+    }
+    if (isPaused) {
+      resumeWorkout();
+    } else {
+      pauseWorkout();
+    }
+  };
+
+  const handleToggleLock = () => {
+    if (isNative) {
+      triggerHapticFeedback(ImpactStyle.Heavy);
+    }
+    toggleLock();
+  };
+
   // Auto-scroll to current activity when it changes
   useEffect(() => {
     if (timelineRef.current && currentActivityIndex >= 0) {
@@ -258,7 +310,7 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
             <div className="pl-8 pr-4 py-2">
               {activities
                 .filter(activity => activity.blockIndex === blockIndex)
-                .map((activity, localIndex) => {
+                .map((activity) => {
                   const globalIndex = activities.findIndex(a => a.id === activity.id);
                   return renderActivitySummary(activity, globalIndex, blockIndex);
                 })}
@@ -404,7 +456,7 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
             🐛 Debug
           </button>
           <button
-            onClick={toggleLock}
+            onClick={handleToggleLock}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               isLocked 
                 ? 'bg-red-100 text-red-700 border border-red-300' 
@@ -414,7 +466,7 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
             {isLocked ? 'LOCKED' : 'LOCK'}
           </button>
           <button
-            onClick={isPaused ? resumeWorkout : pauseWorkout}
+            onClick={handlePauseResume}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
           >
             {isPaused ? 'RESUME' : 'PAUSE'}

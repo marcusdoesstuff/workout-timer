@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react';
-import { setTimeout, clearTimeout, setInterval, clearInterval } from 'worker-timers';
+import { setTimeout, clearTimeout } from 'worker-timers';
 
 interface AccurateTimerOptions {
   interval?: number; // Update frequency in ms (default: 50)

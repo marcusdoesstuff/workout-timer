@@ -169,7 +169,7 @@ export function deleteFullWorkout(workoutId: string): void {
 }
 
 // Auto-save functionality
-let autoSaveTimeout: number | null = null;
+let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export function scheduleAutoSave(callback: () => void, delay: number = 1000): void {
   if (autoSaveTimeout) {

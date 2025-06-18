@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import NumberInput from '../shared/NumberInput';
 import { WorkoutBlock } from '../../types/workout';
 
