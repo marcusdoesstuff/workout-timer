@@ -21,7 +21,7 @@ function App() {
   const [selectedBlockType, setSelectedBlockType] = useState<BlockType>('tempo');
   
   // Initialize Capacitor features
-  useCapacitor();
+  const { isNative } = useCapacitor();
 
   // Load saved blocks on app start
   useEffect(() => {
@@ -134,7 +134,14 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className={`min-h-screen bg-gray-50 py-8 ${isNative ? 'pt-16' : ''}`}>
+      {/* Status bar overlay for native platforms */}
+      {isNative && (
+        <div 
+          className="fixed top-0 left-0 right-0 bg-black bg-opacity-40 pointer-events-none"
+          style={{ height: '4rem', zIndex: 10 }} // Match pt-16 padding
+        />
+      )}
       <div className="container mx-auto px-4">
         {currentScreen === 'build-workout' && (
           <BuildWorkout 

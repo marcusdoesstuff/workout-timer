@@ -9,9 +9,9 @@ export const useCapacitor = () => {
 
   useEffect(() => {
     if (isNative) {
-      // Set status bar style on app load
-      StatusBar.setStyle({ style: Style.Default });
-      StatusBar.setBackgroundColor({ color: '#ffffff' });
+      // Set status bar to overlay with light content for better visibility
+      StatusBar.setStyle({ style: Style.Light });
+      StatusBar.setOverlaysWebView({ overlay: true });
     }
   }, [isNative]);
 
@@ -55,12 +55,23 @@ export const useCapacitor = () => {
     }
   };
 
+  const setStatusBarOverlay = async (overlay: boolean) => {
+    if (isNative) {
+      try {
+        await StatusBar.setOverlaysWebView({ overlay });
+      } catch (error) {
+        console.warn('Status bar overlay not available:', error);
+      }
+    }
+  };
+
   return {
     isNative,
     triggerHapticFeedback,
     keepScreenAwake,
     allowScreenSleep,
     setStatusBarStyle,
+    setStatusBarOverlay,
     ImpactStyle,
     StatusBarStyle: Style
   };

@@ -144,7 +144,10 @@ export function useWorkoutTimer(fullWorkout: FullWorkout) {
           switch (block.blockType) {
             case 'tempo':
               if (block.tempo) {
-                const tempoPhases: (keyof NonNullable<WorkoutBlock['tempo']>)[] = ['down', 'hold', 'up', 'pause'];
+                // Use the correct phase order based on tempoFlipped setting
+                const tempoPhases: (keyof NonNullable<WorkoutBlock['tempo']>)[] = block.tempoFlipped 
+                  ? ['up', 'hold', 'down', 'pause']
+                  : ['down', 'hold', 'up', 'pause'];
                 for (const phase of tempoPhases) {
                   const duration = block.tempo[phase] * 1000;
                   segments.push({
@@ -199,7 +202,10 @@ export function useWorkoutTimer(fullWorkout: FullWorkout) {
             default:
               // Fallback to tempo for unknown types
               if (block.tempo) {
-                const tempoPhases: (keyof NonNullable<WorkoutBlock['tempo']>)[] = ['down', 'hold', 'up', 'pause'];
+                // Use the correct phase order based on tempoFlipped setting
+                const tempoPhases: (keyof NonNullable<WorkoutBlock['tempo']>)[] = block.tempoFlipped 
+                  ? ['up', 'hold', 'down', 'pause']
+                  : ['down', 'hold', 'up', 'pause'];
                 for (const phase of tempoPhases) {
                   const duration = block.tempo[phase] * 1000;
                   segments.push({

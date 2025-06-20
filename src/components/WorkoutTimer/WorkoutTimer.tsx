@@ -538,17 +538,17 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
         
         {currentActivity?.type === 'exercise' ? (
           <div className="max-w-2xl mx-auto">
-            {/* Reps and Tempo sections */}
-            <div className="flex items-center justify-center gap-6 sm:gap-8 md:gap-12">
-              {/* Rep Counter - Large rounded block (only show for non-stretch blocks) */}
+            {/* Mobile Layout (small screens) - Stack vertically */}
+            <div className="sm:hidden">
+              {/* Rep Counter - Only show for non-stretch blocks */}
               {getCurrentBlock().blockType !== 'stretch' && (
-                <div className="text-center">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gray-200 rounded-2xl flex items-center justify-center">
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-gray-200 rounded-2xl flex items-center justify-center mx-auto">
                     <div className="text-center">
-                      <span className="text-xl sm:text-2xl md:text-3xl font-bold text-blue-600">
+                      <span className="text-xl font-bold text-blue-600">
                         {currentRep}
                       </span>
-                      <span className="text-sm sm:text-base md:text-lg text-gray-600 ml-1">
+                      <span className="text-sm text-gray-600 ml-1">
                         / {getCurrentBlock().reps}
                       </span>
                     </div>
@@ -557,18 +557,18 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
                 </div>
               )}
 
-              {/* Timing Display - Larger circles */}
+              {/* Timing Display - Full width on mobile */}
               <div className="text-center">
                 <div className="relative mb-2">
-                  <div className="flex gap-2 sm:gap-3 md:gap-4 justify-center">
+                  <div className="flex gap-3 justify-center">
                     {getTimingDisplay()!.map((tempo, index) => {
                       const isCurrentPhase = index === getCurrentPhaseIndex();
                       
                       return (
                         <div key={index} className="relative">
-                          {/* Tempo circle - shows countdown when active */}
+                          {/* Tempo circle - larger on mobile for better touch */}
                           <div
-                            className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-lg sm:text-xl md:text-2xl font-semibold relative ${
+                            className={`w-20 h-20 rounded-full flex items-center justify-center text-xl font-semibold relative ${
                               isCurrentPhase
                                 ? 'bg-blue-200 text-blue-600'
                                 : 'bg-gray-200 text-gray-600'
@@ -594,34 +594,123 @@ export default function WorkoutTimer({ fullWorkout, onBack }: WorkoutTimerProps)
                 </div>
                 
                 {/* Phase labels */}
-                <div className="flex gap-2 sm:gap-3 md:gap-4 text-xs text-gray-500 justify-center">
+                <div className="flex gap-3 text-xs text-gray-500 justify-center">
                   {getCurrentBlock().blockType === 'tempo' && (
                     <>
                       {getCurrentBlock().tempoFlipped ? (
                         <>
-                          <span className="w-16 sm:w-20 md:w-24 text-center">Up</span>
-                          <span className="w-16 sm:w-20 md:w-24 text-center">Hold</span>
-                          <span className="w-16 sm:w-20 md:w-24 text-center">Down</span>
-                          <span className="w-16 sm:w-20 md:w-24 text-center">Pause</span>
+                          <span className="w-20 text-center">Up</span>
+                          <span className="w-20 text-center">Hold</span>
+                          <span className="w-20 text-center">Down</span>
+                          <span className="w-20 text-center">Pause</span>
                         </>
                       ) : (
                         <>
-                          <span className="w-16 sm:w-20 md:w-24 text-center">Down</span>
-                          <span className="w-16 sm:w-20 md:w-24 text-center">Hold</span>
-                          <span className="w-16 sm:w-20 md:w-24 text-center">Up</span>
-                          <span className="w-16 sm:w-20 md:w-24 text-center">Pause</span>
+                          <span className="w-20 text-center">Down</span>
+                          <span className="w-20 text-center">Hold</span>
+                          <span className="w-20 text-center">Up</span>
+                          <span className="w-20 text-center">Pause</span>
                         </>
                       )}
                     </>
                   )}
                   {getCurrentBlock().blockType === '2-step' && (
                     <>
-                      <span className="w-16 sm:w-20 md:w-24 text-center">Contract</span>
-                      <span className="w-16 sm:w-20 md:w-24 text-center">Relax</span>
+                      <span className="w-20 text-center">Contract</span>
+                      <span className="w-20 text-center">Relax</span>
                     </>
                   )}
                   {getCurrentBlock().blockType === 'stretch' && (
-                    <span className="w-16 sm:w-20 md:w-24 text-center">Stretch</span>
+                    <span className="w-20 text-center">Stretch</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop/Tablet Layout (sm and up) - Side by side */}
+            <div className="hidden sm:flex items-center justify-center gap-6 md:gap-8 lg:gap-12">
+              {/* Rep Counter - Large rounded block (only show for non-stretch blocks) */}
+              {getCurrentBlock().blockType !== 'stretch' && (
+                <div className="text-center">
+                  <div className="w-20 h-20 md:w-24 md:h-24 bg-gray-200 rounded-2xl flex items-center justify-center">
+                    <div className="text-center">
+                      <span className="text-2xl md:text-3xl font-bold text-blue-600">
+                        {currentRep}
+                      </span>
+                      <span className="text-base md:text-lg text-gray-600 ml-1">
+                        / {getCurrentBlock().reps}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">Reps</div>
+                </div>
+              )}
+
+              {/* Timing Display - Larger circles */}
+              <div className="text-center">
+                <div className="relative mb-2">
+                  <div className="flex gap-3 md:gap-4 justify-center">
+                    {getTimingDisplay()!.map((tempo, index) => {
+                      const isCurrentPhase = index === getCurrentPhaseIndex();
+                      
+                      return (
+                        <div key={index} className="relative">
+                          {/* Tempo circle - shows countdown when active */}
+                          <div
+                            className={`w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-xl md:text-2xl font-semibold relative ${
+                              isCurrentPhase
+                                ? 'bg-blue-200 text-blue-600'
+                                : 'bg-gray-200 text-gray-600'
+                            }`}
+                            style={{ zIndex: 1 }}
+                          >
+                            {isCurrentPhase ? timeRemaining : tempo}
+                          </div>
+                          
+                          {/* Progress Circle Overlay - only for current phase */}
+                          {isCurrentPhase && (
+                            <ProgressCircle
+                              key={`${currentActivityIndex}-${currentTempoPhase}-${currentRep}`}
+                              duration={tempo}
+                              isPaused={isPaused}
+                              isActive={isCurrentPhase}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                {/* Phase labels */}
+                <div className="flex gap-3 md:gap-4 text-xs text-gray-500 justify-center">
+                  {getCurrentBlock().blockType === 'tempo' && (
+                    <>
+                      {getCurrentBlock().tempoFlipped ? (
+                        <>
+                          <span className="w-20 md:w-24 text-center">Up</span>
+                          <span className="w-20 md:w-24 text-center">Hold</span>
+                          <span className="w-20 md:w-24 text-center">Down</span>
+                          <span className="w-20 md:w-24 text-center">Pause</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-20 md:w-24 text-center">Down</span>
+                          <span className="w-20 md:w-24 text-center">Hold</span>
+                          <span className="w-20 md:w-24 text-center">Up</span>
+                          <span className="w-20 md:w-24 text-center">Pause</span>
+                        </>
+                      )}
+                    </>
+                  )}
+                  {getCurrentBlock().blockType === '2-step' && (
+                    <>
+                      <span className="w-20 md:w-24 text-center">Contract</span>
+                      <span className="w-20 md:w-24 text-center">Relax</span>
+                    </>
+                  )}
+                  {getCurrentBlock().blockType === 'stretch' && (
+                    <span className="w-20 md:w-24 text-center">Stretch</span>
                   )}
                 </div>
               </div>

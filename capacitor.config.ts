@@ -9,8 +9,8 @@ const config: CapacitorConfig = {
   },
   plugins: {
     StatusBar: {
-      style: 'DEFAULT',
-      backgroundColor: '#ffffff'
+      style: 'LIGHT',
+      overlaysWebView: true
     },
     KeepAwake: {
       // Plugin will be used programmatically
